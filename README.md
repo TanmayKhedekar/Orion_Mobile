@@ -432,7 +432,7 @@ This project was built with passion during a hackathon by an amazing team.
 | **Tanmay Khedekar** | AI Integration, OpenAPI Parsing & Testing |
 | **Anish Kinker** | AI/LLM Engineer • Prompt Engineering • AI Workflow Design |
 | **Drishti Pardeshi** | Backend Engineer • API Sandbox • Request Execution Pipeline |
-| **Tasu Dhote** | Frontend Engineer • UI/UX Development |
+| **Tashu Dhote** | Frontend Engineer • UI/UX Development |
 
 ---
 
