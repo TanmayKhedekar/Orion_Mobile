@@ -1149,9 +1149,8 @@ export default function Home() {
                         <div className="h-full overflow-y-auto w-full">
                             <div className="max-w-6xl mx-auto space-y-16 px-6 py-10 pb-24">
 
-                                {/* Hero Brand Block + Signature Metaphor Animation */}
                                 {/* Brand Header — large logo + wordmark */}
-                                <div className="flex flex-col items-center text-center pt-2 pb-4 space-y-4">
+                                <div className="flex flex-col items-center text-center pt-4 pb-2 space-y-4">
                                     <div className="flex items-center gap-5">
                                         <div className="relative">
                                             <div className="absolute inset-0 rounded-3xl bg-accent/20 blur-2xl scale-150" />
@@ -1179,42 +1178,86 @@ export default function Home() {
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                                    <div className="lg:col-span-7 space-y-5">
+                                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+                                    <div className="lg:col-span-7 space-y-6">
 
                                         {/* Central Parsing Input */}
-                                        <div className="w-full flex flex-col space-y-4 pt-2">
+                                        <div className="w-full flex flex-col space-y-4">
                                             <div className="flex items-center space-x-3">
                                                 <div className="relative flex-1 w-full">
                                                     <Link className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
                                                     <Input
                                                         value={url}
                                                         onChange={e => setUrl(e.target.value)}
-                                                        placeholder="Paste OpenAPI / Swagger JSON URL..."
+                                                        placeholder="Paste any OpenAPI / Swagger URL — JSON or YAML supported"
                                                         className="pl-11 h-14 rounded-xl glassmorphism text-base w-full font-mono text-foreground focus-visible:ring-2 focus-visible:ring-accent"
                                                         onKeyDown={e => { if (e.key === 'Enter') handleParse(); }}
                                                     />
                                                 </div>
-                                                <Button onClick={() => handleParse()} disabled={loading} size="lg" className="h-14 px-8 rounded-xl font-bold text-base bg-accent text-background hover:opacity-90 transition-all">
+                                                <Button onClick={() => handleParse()} disabled={loading} size="lg" className="h-14 px-8 rounded-xl font-bold text-base bg-accent text-background hover:opacity-90 transition-all shadow-lg shadow-accent/10">
                                                     {loading ? "Parsing..." : "Parse API"}
                                                 </Button>
                                             </div>
-                                            <div className="pt-1">
-                                                <p className="text-[10px] uppercase tracking-widest font-bold text-foreground/50 mb-2 font-mono">Quick Start Samples</p>
-                                                <div className="flex flex-wrap gap-2">
+                                            <p className="text-xs text-foreground/60 font-sans pl-1">
+                                                Works with any framework — FastAPI, Express, Spring Boot, Django and more. Try a sample above to see it in action.
+                                            </p>
+                                            <div className="pt-2 space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-[10px] uppercase tracking-widest font-bold text-foreground/70 font-mono flex items-center gap-1.5">
+                                                        <Sparkles className="w-3.5 h-3.5 text-accent" />
+                                                        Quick Start Sample Specifications
+                                                    </p>
+                                                    <span className="text-[10px] font-mono text-muted-foreground">Click to load & parse</span>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                     {[
-                                                        { name: "Petstore v2", url: "https://petstore.swagger.io/v2/swagger.json" },
-                                                        { name: "Bitbucket", url: "https://api.bitbucket.org/swagger.json" },
-                                                        { name: "1Password", url: "https://api.apis.guru/v2/specs/1password.com/events/1.0.0/openapi.json" },
-                                                        { name: "1Forge", url: "https://api.apis.guru/v2/specs/1forge.com/0.0.1/swagger.json" },
-                                                        { name: "Authentiq", url: "https://api.apis.guru/v2/specs/6-dot-authentiqio.appspot.com/6/openapi.json" }
+                                                        {
+                                                            name: "Petstore (YAML)",
+                                                            url: "https://raw.githubusercontent.com/swagger-api/swagger-petstore/master/src/main/resources/openapi.yaml",
+                                                            badge: "OpenAPI 3.0 · YAML"
+                                                        },
+                                                        {
+                                                            name: "Spotify API",
+                                                            url: "https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/spotify.com/1.0.0/openapi.yaml",
+                                                            badge: "OpenAPI 3.0 · 80+ endpoints"
+                                                        },
+                                                        {
+                                                            name: "Kubernetes",
+                                                            url: "https://raw.githubusercontent.com/kubernetes/kubernetes/master/api/openapi-spec/swagger.json",
+                                                            badge: "Swagger 2.0 · Enterprise Scale",
+                                                            warning: "Large spec — may take a few seconds to parse."
+                                                        },
+                                                        {
+                                                            name: "OpenAI API",
+                                                            url: "https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.json",
+                                                            badge: "OpenAPI 3.0 · Production"
+                                                        },
+                                                        {
+                                                            name: "AWS S3",
+                                                            url: "https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/amazonaws.com/s3/2006-03-01/openapi.yaml",
+                                                            badge: "OpenAPI 3.0 · YAML · Cloud"
+                                                        }
                                                     ].map((sample) => (
                                                         <button
                                                             key={sample.name}
+                                                            type="button"
                                                             onClick={() => { setUrl(sample.url); handleParse(sample.url); }}
-                                                            className="px-3 py-1.5 rounded-full text-[11px] font-mono font-semibold border border-border text-foreground/70 bg-surface hover:border-accent hover:text-accent transition-all duration-200"
+                                                            className="group text-left p-3.5 rounded-xl bg-surface border border-border border-l-[3px] border-l-accent hover:border-accent/40 hover:shadow-theme hover:scale-[1.01] transition-all duration-200 cursor-pointer flex flex-col justify-between"
                                                         >
-                                                            {sample.name}
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <span className="font-bold text-foreground text-sm group-hover:text-accent transition-colors">
+                                                                    {sample.name}
+                                                                </span>
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-accent/10 text-accent border border-accent/20 whitespace-nowrap">
+                                                                    {sample.badge}
+                                                                </span>
+                                                            </div>
+                                                            {sample.warning && (
+                                                                <div className="mt-2 text-[10px] text-amber-500 font-mono flex items-center gap-1">
+                                                                    <AlertCircle className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                                                                    <span>{sample.warning}</span>
+                                                                </div>
+                                                            )}
                                                         </button>
                                                     ))}
                                                 </div>
@@ -1322,6 +1365,107 @@ export default function Home() {
                                     </div>
                                 </div>
 
+                                {/* 3b-2. Works With Every Major API Standard */}
+                                <div className="space-y-8 pt-12 border-t border-border">
+                                    <div className="text-center space-y-3">
+                                        <h2 className="text-2xl md:text-3xl font-bold font-display text-foreground">
+                                            Works With Every Major API Standard
+                                        </h2>
+                                        <p className="text-foreground/70 text-base max-w-2xl mx-auto font-sans">
+                                            Universal compatibility across OpenAPI versions, serialization formats, and modern backend frameworks.
+                                        </p>
+                                    </div>
+
+                                    {/* Part A — Row of compatibility badges */}
+                                    <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-4xl mx-auto">
+                                        {[
+                                            "OpenAPI 3.0",
+                                            "Swagger 2.0",
+                                            "JSON",
+                                            "YAML",
+                                            "REST API",
+                                            "FastAPI",
+                                            "Express",
+                                            "Spring Boot",
+                                            "Django",
+                                            "Any Framework"
+                                        ].map((badge) => (
+                                            <span
+                                                key={badge}
+                                                className="px-3.5 py-1.5 rounded-full text-xs font-mono font-semibold bg-surface text-accent border border-accent/25 shadow-sm hover:border-accent hover:shadow-theme transition-all cursor-default"
+                                            >
+                                                {badge}
+                                            </span>
+                                        ))}
+                                    </div>
+
+                                    {/* Part B — 2-column grid of powered-by sample cards */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                                        {[
+                                            {
+                                                name: "Petstore",
+                                                badge: "OpenAPI 3.0 · YAML",
+                                                desc: "Petstore — Standard OpenAPI 3.0 sample spec in clean YAML format",
+                                                url: "https://raw.githubusercontent.com/swagger-api/swagger-petstore/master/src/main/resources/openapi.yaml"
+                                            },
+                                            {
+                                                name: "Spotify API",
+                                                badge: "OpenAPI 3.0 · 80+ Endpoints",
+                                                desc: "Spotify — Complete REST API with 80+ endpoints and complex schemas",
+                                                url: "https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/spotify.com/1.0.0/openapi.yaml"
+                                            },
+                                            {
+                                                name: "Kubernetes",
+                                                badge: "Swagger 2.0 · Enterprise Scale",
+                                                desc: "Kubernetes — 800+ enterprise-grade endpoints parsed instantly",
+                                                url: "https://raw.githubusercontent.com/kubernetes/kubernetes/master/api/openapi-spec/swagger.json"
+                                            },
+                                            {
+                                                name: "OpenAI API",
+                                                badge: "OpenAPI 3.0 · Production",
+                                                desc: "OpenAI — Modern production API spec powering frontier AI language models",
+                                                url: "https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.json"
+                                            },
+                                            {
+                                                name: "AWS S3",
+                                                badge: "OpenAPI 3.0 · Cloud",
+                                                desc: "AWS S3 — Industrial cloud storage REST specification in multi-file YAML",
+                                                url: "https://raw.githubusercontent.com/APIs-guru/openapi-directory/main/APIs/amazonaws.com/s3/2006-03-01/openapi.yaml"
+                                            }
+                                        ].map((item) => (
+                                            <div
+                                                key={item.name}
+                                                onClick={() => {
+                                                    setUrl(item.url);
+                                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                    handleParse(item.url);
+                                                }}
+                                                className="p-5 rounded-2xl bg-surface border border-border border-l-[3px] border-l-accent hover:border-accent/50 hover:shadow-theme transition-all cursor-pointer flex flex-col justify-between group"
+                                            >
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-bold text-foreground text-base group-hover:text-accent transition-colors">
+                                                            {item.name}
+                                                        </span>
+                                                        <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold bg-accent/10 text-accent border border-accent/20">
+                                                            {item.badge}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-foreground/70 font-sans leading-relaxed">
+                                                        {item.desc}
+                                                    </p>
+                                                </div>
+                                                <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between">
+                                                    <span className="text-[11px] font-mono text-accent flex items-center gap-1 font-semibold">
+                                                        Try Sample Spec →
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+
                                 {/* 3c. "How it works" strip */}
                                 <div className="space-y-8 pt-10 border-t border-border">
                                     <div className="text-center space-y-3">
@@ -1391,26 +1535,32 @@ export default function Home() {
                                         Start with any OpenAPI JSON specification URL — no account or API keys required to parse.
                                     </p>
 
-                                    <div className="max-w-xl mx-auto flex items-center space-x-3">
-                                        <div className="relative flex-1 w-full">
-                                            <Link className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
-                                            <Input
-                                                value={url}
-                                                onChange={e => setUrl(e.target.value)}
-                                                placeholder="Paste OpenAPI / Swagger JSON URL..."
-                                                className="pl-11 h-14 rounded-xl glassmorphism text-base w-full font-mono text-foreground focus-visible:ring-2 focus-visible:ring-accent"
-                                                onKeyDown={e => { if (e.key === 'Enter') handleParse(); }}
-                                            />
+                                    <div className="max-w-xl mx-auto space-y-3">
+                                        <div className="flex items-center space-x-3">
+                                            <div className="relative flex-1 w-full">
+                                                <Link className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
+                                                <Input
+                                                    value={url}
+                                                    onChange={e => setUrl(e.target.value)}
+                                                    placeholder="Paste any OpenAPI / Swagger URL — JSON or YAML supported"
+                                                    className="pl-11 h-14 rounded-xl glassmorphism text-base w-full font-mono text-foreground focus-visible:ring-2 focus-visible:ring-accent"
+                                                    onKeyDown={e => { if (e.key === 'Enter') handleParse(); }}
+                                                />
+                                            </div>
+                                            <Button onClick={() => handleParse()} disabled={loading} size="lg" className="h-14 px-8 rounded-xl font-bold text-base bg-accent text-background hover:opacity-90 transition-all">
+                                                {loading ? "Parsing..." : "Parse API"}
+                                            </Button>
                                         </div>
-                                        <Button onClick={() => handleParse()} disabled={loading} size="lg" className="h-14 px-8 rounded-xl font-bold text-base bg-accent text-background hover:opacity-90 transition-all">
-                                            {loading ? "Parsing..." : "Parse API"}
-                                        </Button>
+                                        <p className="text-xs text-foreground/60 font-sans text-center">
+                                            Works with any framework — FastAPI, Express, Spring Boot, Django and more. Try a sample above to see it in action.
+                                        </p>
                                     </div>
 
                                     <div className="pt-8 text-xs font-mono text-foreground/50">
                                         Orion API Intelligence Layer • Designed for Google Antigravity
                                     </div>
                                 </div>
+
 
                             </div>
                         </div>
