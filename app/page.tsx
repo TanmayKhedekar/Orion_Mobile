@@ -1068,7 +1068,7 @@ export default function Home() {
                                         size="lg"
                                         className="w-full h-14 text-lg font-bold"
                                     >
-                                        {intentLoading ? "Thinking like a senior engineer..." : "Generate Integration"}
+                                        {intentLoading ? "Generating Integration..." : "Generate Integration"}
                                     </Button>
                                     {intentError && (
                                         <div className="p-4 bg-destructive/10 text-destructive text-sm rounded-xl">
@@ -1113,30 +1113,51 @@ export default function Home() {
                                                 </div>
                                             </div>
                                         )}
-
                                         {/* Code Tabs */}
-                                        <div className="border border-border rounded-xl bg-card overflow-hidden">
-                                            <div className="flex border-b border-border bg-black/20">
-                                                {[
-                                                    { id: "python", label: "Python" },
-                                                    { id: "js", label: "JavaScript" },
-                                                    { id: "curl", label: "cURL" }
-                                                ].map(tab => (
-                                                    <button
-                                                        key={tab.id}
-                                                        onClick={() => setActiveCodeTab(tab.id as any)}
-                                                        className={`px-6 py-3 text-sm font-bold transition-colors ${activeCodeTab === tab.id ? 'bg-background text-primary border-b-2 border-primary' : 'text-muted-foreground hover:bg-white/5'}`}
-                                                    >
-                                                        {tab.label}
-                                                    </button>
-                                                ))}
+                                        <div className="border border-zinc-800 rounded-xl bg-black overflow-hidden shadow-2xl">
+                                            <div className="flex items-center justify-between border-b border-zinc-800 bg-black px-3 pt-2">
+                                                <div className="flex items-center space-x-1">
+                                                    {[
+                                                        { id: "python", label: "Python" },
+                                                        { id: "js", label: "JavaScript" },
+                                                        { id: "curl", label: "cURL" }
+                                                    ].map(tab => (
+                                                        <button
+                                                            key={tab.id}
+                                                            onClick={() => setActiveCodeTab(tab.id as any)}
+                                                            className={`px-5 py-2.5 text-xs font-mono font-bold transition-all rounded-t-lg ${
+                                                                activeCodeTab === tab.id
+                                                                    ? 'bg-zinc-900 text-emerald-400 border-b-2 border-emerald-400'
+                                                                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
+                                                            }`}
+                                                        >
+                                                            {tab.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <button
+                                                    onClick={(e) => {
+                                                        const currentCode = activeCodeTab === "python" ? intentResult.code :
+                                                            activeCodeTab === "js" ? intentResult.jsCode :
+                                                                (intentResult.curlCommands || []).join("\n\n");
+                                                        navigator.clipboard.writeText(currentCode);
+                                                        const btn = e.currentTarget;
+                                                        const orig = btn.innerHTML;
+                                                        btn.innerHTML = '<span class="text-emerald-400 font-bold">Copied!</span>';
+                                                        setTimeout(() => btn.innerHTML = orig, 2000);
+                                                    }}
+                                                    className="px-3 py-1 text-xs font-mono text-zinc-400 hover:text-zinc-100 flex items-center gap-1.5 transition-colors"
+                                                >
+                                                    <Copy className="w-3.5 h-3.5" />
+                                                    <span>Copy</span>
+                                                </button>
                                             </div>
-                                            <div className="p-6 overflow-x-auto text-sm font-mono text-green-300 bg-black/40">
+                                            <div className="p-6 overflow-x-auto text-sm font-mono text-emerald-400 bg-black leading-relaxed">
                                                 <pre>
                                                     <code>
                                                         {activeCodeTab === "python" ? intentResult.code :
                                                             activeCodeTab === "js" ? intentResult.jsCode :
-                                                                (intentResult.curlCommands || []).join("\\n\\n")}
+                                                                (intentResult.curlCommands || []).join("\n\n")}
                                                     </code>
                                                 </pre>
                                             </div>
@@ -1555,13 +1576,7 @@ export default function Home() {
                                             Works with any framework — FastAPI, Express, Spring Boot, Django and more. Try a sample above to see it in action.
                                         </p>
                                     </div>
-
-                                    <div className="pt-8 text-xs font-mono text-foreground/50">
-                                        Orion API Intelligence Layer • Designed for Google Antigravity
-                                    </div>
                                 </div>
-
-
                             </div>
                         </div>
                     ) : selectedEndpoint ? (
