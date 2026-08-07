@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
+import { aggressiveTrimSpec } from '@/lib/specTrimmer';
 
 let groq: Groq;
 try {
@@ -48,14 +49,17 @@ export async function POST(req: Request) {
 
         let parsedA, parsedB;
         try {
-            parsedA = JSON.parse(specA);
-            parsedB = JSON.parse(specB);
+            parsedA = typeof specA === 'string' ? JSON.parse(specA) : specA;
+            parsedB = typeof specB === 'string' ? JSON.parse(specB) : specB;
         } catch (e) {
             return NextResponse.json({ error: 'Invalid JSON spec provided' }, { status: 400 });
         }
 
-        const endpointsA = extractEndpoints(parsedA);
-        const endpointsB = extractEndpoints(parsedB);
+        const trimmedA = aggressiveTrimSpec(parsedA);
+        const trimmedB = aggressiveTrimSpec(parsedB);
+
+        const endpointsA = extractEndpoints(trimmedA);
+        const endpointsB = extractEndpoints(trimmedB);
 
         const addedEndpoints: { method: string, path: string }[] = [];
         const removedEndpoints: { method: string, path: string }[] = [];
@@ -156,10 +160,43 @@ CRITICAL: Your entire response must be a single valid JSON object with no text b
 
         return NextResponse.json(finalResponse);
     } catch (error: any) {
-        console.error('Groq API Diff Error:', error);
-        return NextResponse.json(
-            { error: error?.message || 'An error occurred processing the diff.' },
-            { status: 500 }
-        );
+        console.error('Route error:', error);
+
+        const errorMessage = error?.message || error?.error?.message || '';
+        const status = error?.status || 500;
+
+        // Token limit exceeded
+        if (status === 413 || errorMessage.includes('Request too large') || errorMessage.includes('tokens per minute')) {
+            return NextResponse.json({
+                error: 'spec_too_large',
+                userMessage: 'This API spec is too large to process on our current plan. We\'ve loaded the first 15 endpoints for you — try using a smaller spec or a specific section of this API.',
+                tip: 'Large specs like Spotify or OpenAI work best with targeted queries on specific endpoint groups.'
+            }, { status: 413 });
+        }
+
+        // Context length exceeded
+        if (status === 400 && errorMessage.includes('reduce the length')) {
+            return NextResponse.json({
+                error: 'context_too_long',
+                userMessage: 'This API spec has too many endpoints to generate a complete SDK at once. Showing results for the first 15 endpoints.',
+                tip: 'Try loading a smaller API spec for full SDK generation.'
+            }, { status: 400 });
+        }
+
+        // Rate limit
+        if (status === 429) {
+            return NextResponse.json({
+                error: 'rate_limit',
+                userMessage: 'Daily AI quota reached. Please try again in a few minutes.',
+                tip: 'Our free-tier AI plan resets every hour.'
+            }, { status: 429 });
+        }
+
+        // Generic fallback
+        return NextResponse.json({
+            error: 'ai_error',
+            userMessage: 'Something went wrong with the AI response. Please try again.',
+        }, { status: 500 });
     }
 }
+

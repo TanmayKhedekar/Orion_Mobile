@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Link, Send, Code, Play, AlertCircle, ChevronRight, Check, Search, Shield, Copy, Sun, Moon, X, Download, Link2, Sparkles, Plus, Trash2, Save } from "lucide-react";
+import { Bot, Link, Send, Code, Play, AlertCircle, ChevronRight, Check, Search, Shield, Copy, Sun, Moon, X, Download, Link2, Sparkles, Plus, Trash2, Save, PlusCircle, MinusCircle, RefreshCw, Terminal, AlertTriangle } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { useAuth } from "@/context/AuthContext";
 import { LogOut } from "lucide-react";
@@ -76,12 +76,66 @@ const MessageContent = ({ content, theme }: { content: string, theme: "dark" | "
     );
 };
 
+interface FriendlyErrorData {
+    error?: string;
+    userMessage?: string;
+    tip?: string;
+}
+
+function FriendlyErrorBox({ error }: { error: string | FriendlyErrorData | null }) {
+    if (!error) return null;
+
+    const errorObj: FriendlyErrorData = typeof error === 'string' ? { userMessage: error } : error;
+    const isSpecTooLarge = errorObj.error === 'spec_too_large';
+
+    if (isSpecTooLarge) {
+        return (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/40 rounded-xl space-y-1 text-left animate-in fade-in">
+                <div className="flex items-start space-x-3">
+                    <span className="text-lg flex-shrink-0 leading-none">⚠️</span>
+                    <div className="space-y-1">
+                        <div className="text-white font-bold text-sm leading-snug">
+                            Spec too large for full processing
+                        </div>
+                        <div className="text-white text-xs leading-relaxed">
+                            We&apos;ve analyzed the first 15 endpoints of this API. For complete coverage, try a more focused API spec.
+                        </div>
+                        {errorObj.tip && (
+                            <div className="text-[11px] text-amber-200/70 pt-1 border-t border-amber-500/20 mt-1">
+                                💡 {errorObj.tip}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/40 rounded-xl space-y-1 text-left animate-in fade-in">
+            <div className="flex items-start space-x-3">
+                <span className="text-lg flex-shrink-0 leading-none">⚠️</span>
+                <div className="space-y-1">
+                    <div className="text-white text-xs font-medium leading-relaxed">
+                        {errorObj.userMessage || errorObj.error || "An unexpected error occurred."}
+                    </div>
+                    {errorObj.tip && (
+                        <div className="text-[11px] text-amber-200/70 pt-1 border-t border-amber-500/20 mt-1">
+                            💡 {errorObj.tip}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function Home() {
     const { user, logout } = useAuth();
     const [url, setUrl] = useState("https://petstore.swagger.io/v2/swagger.json");
     const [spec, setSpec] = useState<ApiSpec | null>(null);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string | FriendlyErrorData | null>(null);
 
     const [selectedEndpoint, setSelectedEndpoint] = useState<ApiEndpoint | null>(null);
 
@@ -102,7 +156,7 @@ export default function Home() {
     const [intentGoal, setIntentGoal] = useState("");
     const [intentLoading, setIntentLoading] = useState(false);
     const [intentResult, setIntentResult] = useState<any>(null);
-    const [intentError, setIntentError] = useState<string | null>(null);
+    const [intentError, setIntentError] = useState<string | FriendlyErrorData | null>(null);
     const [activeCodeTab, setActiveCodeTab] = useState<"python" | "js" | "curl">("python");
 
     // Diff Mode
@@ -110,20 +164,20 @@ export default function Home() {
     const [diffUrlB, setDiffUrlB] = useState("");
     const [diffLoading, setDiffLoading] = useState(false);
     const [diffResult, setDiffResult] = useState<any>(null);
-    const [diffError, setDiffError] = useState<string | null>(null);
+    const [diffError, setDiffError] = useState<string | FriendlyErrorData | null>(null);
 
     // Audit Mode
     const [auditUrl, setAuditUrl] = useState("");
     const [auditLoading, setAuditLoading] = useState(false);
     const [auditResult, setAuditResult] = useState<any>(null);
-    const [auditError, setAuditError] = useState<string | null>(null);
+    const [auditError, setAuditError] = useState<string | FriendlyErrorData | null>(null);
 
     // SDK Generator Mode
     const [sdkModalOpen, setSdkModalOpen] = useState(false);
     const [sdkLang, setSdkLang] = useState<"python" | "typescript">("python");
     const [sdkLoading, setSdkLoading] = useState(false);
     const [sdkResult, setSdkResult] = useState<any>(null);
-    const [sdkError, setSdkError] = useState<string | null>(null);
+    const [sdkError, setSdkError] = useState<string | FriendlyErrorData | null>(null);
 
     // Chain Variables State
     const [variableStore, setVariableStore] = useState<Record<string, string>>({});
@@ -190,10 +244,13 @@ export default function Home() {
                 body: JSON.stringify({ goal: intentGoal, specs: spec ? [spec] : [] })
             });
             const data = await res.json();
-            if (data.error) throw new Error(data.error);
+            if (!res.ok || data.error) {
+                setIntentError(data.userMessage ? data : { userMessage: data.error || "Failed to generate integration." });
+                return;
+            }
             setIntentResult(data);
         } catch (err: any) {
-            setIntentError(err.message || "Failed to generate integration.");
+            setIntentError({ userMessage: err.message || "Failed to generate integration." });
         } finally {
             setIntentLoading(false);
         }
@@ -228,8 +285,12 @@ export default function Home() {
 
             const data = await res.json();
 
-            if (data.error) {
-                throw new Error(data.error);
+            if (!res.ok || data.error) {
+                const errorMsg = data.error === 'spec_too_large'
+                    ? "⚠️ Spec too large for full processing\nWe've analyzed the first 15 endpoints of this API. For complete coverage, try a more focused API spec."
+                    : `⚠️ ${data.userMessage || data.error || "An error occurred during chat."}${data.tip ? `\n\n💡 ${data.tip}` : ''}`;
+                setMessages([...newMessages, { role: "assistant", content: errorMsg }]);
+                return;
             }
 
             setMessages([...newMessages, { role: "assistant", content: data.content }]);
@@ -406,10 +467,13 @@ export default function Home() {
                 body: JSON.stringify({ specA: specAStr, specB: specBStr })
             });
             const data = await res.json();
-            if (data.error) throw new Error(data.error);
+            if (!res.ok || data.error) {
+                setDiffError(data.userMessage ? data : { userMessage: data.error || "Failed to generate API Diff." });
+                return;
+            }
             setDiffResult(data);
         } catch (err: any) {
-            setDiffError(err.message || "Failed to generate API Diff.");
+            setDiffError({ userMessage: err.message || "Failed to generate API Diff." });
         } finally {
             setDiffLoading(false);
         }
@@ -428,10 +492,13 @@ export default function Home() {
                 body: JSON.stringify({ spec: specStr })
             });
             const data = await res.json();
-            if (data.error) throw new Error(data.error);
+            if (!res.ok || data.error) {
+                setAuditError(data.userMessage ? data : { userMessage: data.error || "Failed to run Security Audit." });
+                return;
+            }
             setAuditResult(data);
         } catch (err: any) {
-            setAuditError(err.message || "Failed to run Security Audit.");
+            setAuditError({ userMessage: err.message || "Failed to run Security Audit." });
         } finally {
             setAuditLoading(false);
         }
@@ -468,7 +535,15 @@ export default function Home() {
                 })
             });
             const data = await res.json();
-            if (data.error) throw new Error(data.error);
+            if (!res.ok || data.error) {
+                setDiagnosisResult({
+                    diagnosis: "AI Diagnosis error",
+                    rootCause: data.userMessage || data.error || "Failed to diagnose issue",
+                    fix: data.tip || "Try a smaller spec or specific endpoint.",
+                    severity: "warning"
+                });
+                return;
+            }
             setDiagnosisResult(data);
         } catch (err: any) {
             console.error("Diagnosis error:", err);
@@ -490,10 +565,13 @@ export default function Home() {
                 body: JSON.stringify({ spec: specStr, language: sdkLang })
             });
             const data = await res.json();
-            if (data.error) throw new Error(data.error);
+            if (!res.ok || data.error) {
+                setSdkError(data.userMessage ? data : { userMessage: data.error || "Failed to generate SDK." });
+                return;
+            }
             setSdkResult(data);
         } catch (err: any) {
-            setSdkError(err.message || "Failed to generate SDK.");
+            setSdkError({ userMessage: err.message || "Failed to generate SDK." });
         } finally {
             setSdkLoading(false);
         }
@@ -565,11 +643,7 @@ export default function Home() {
                                     >
                                         {sdkLoading ? "Building your SDK..." : "Generate SDK"}
                                     </Button>
-                                    {sdkError && (
-                                        <div className="p-4 bg-destructive/10 text-destructive text-sm rounded-xl border border-destructive/20">
-                                            {sdkError}
-                                        </div>
-                                    )}
+                                    <FriendlyErrorBox error={sdkError} />
                                 </div>
                             ) : (
                                 <div className="space-y-8 animate-in fade-in">
@@ -786,39 +860,47 @@ export default function Home() {
                                     {diffLoading ? "Comparing specs and generating migration guide..." : "Compare & Generate Migration Guide"}
                                 </Button>
 
-                                {diffError && (
-                                    <div className="p-4 bg-destructive/10 text-destructive text-sm rounded-xl">
-                                        {diffError}
-                                    </div>
-                                )}
+                                <FriendlyErrorBox error={diffError} />
 
                                 {diffResult && (
                                     <div className="space-y-8 mt-12 animate-in fade-in slide-in-from-bottom-4">
 
                                         {/* Change Summary Bar */}
-                                        <div className="flex gap-4">
-                                            <div className="flex-1 p-4 rounded-xl border border-green-500/30 bg-green-500/10 flex items-center justify-between">
-                                                <span className="text-green-500 font-bold">Added</span>
-                                                <span className="text-2xl font-black text-green-400">{diffResult.addedEndpoints?.length || 0}</span>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/20 flex items-center justify-between shadow-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <PlusCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                                                    <span className="text-emerald-800 dark:text-emerald-300 font-bold text-base">Added</span>
+                                                </div>
+                                                <span className="text-3xl font-black text-emerald-700 dark:text-emerald-400">{diffResult.addedEndpoints?.length || 0}</span>
                                             </div>
-                                            <div className="flex-1 p-4 rounded-xl border border-red-500/30 bg-red-500/10 flex items-center justify-between">
-                                                <span className="text-red-500 font-bold">Removed</span>
-                                                <span className="text-2xl font-black text-red-400">{diffResult.removedEndpoints?.length || 0}</span>
+                                            <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 dark:bg-rose-950/20 flex items-center justify-between shadow-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <MinusCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                                                    <span className="text-rose-800 dark:text-rose-300 font-bold text-base">Removed</span>
+                                                </div>
+                                                <span className="text-3xl font-black text-rose-700 dark:text-rose-400">{diffResult.removedEndpoints?.length || 0}</span>
                                             </div>
-                                            <div className="flex-1 p-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 flex items-center justify-between">
-                                                <span className="text-yellow-500 font-bold">Modified</span>
-                                                <span className="text-2xl font-black text-yellow-400">{diffResult.modifiedEndpoints?.length || 0}</span>
+                                            <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/20 flex items-center justify-between shadow-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <RefreshCw className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                                                    <span className="text-amber-800 dark:text-amber-300 font-bold text-base">Modified</span>
+                                                </div>
+                                                <span className="text-3xl font-black text-amber-700 dark:text-amber-400">{diffResult.modifiedEndpoints?.length || 0}</span>
                                             </div>
                                         </div>
 
                                         {/* Breaking Changes */}
                                         {diffResult.breakingChanges?.length > 0 && (
                                             <div className="space-y-4">
-                                                <h3 className="text-2xl font-bold text-red-400 flex items-center"><AlertCircle className="w-5 h-5 mr-2" /> Breaking Changes</h3>
+                                                <h3 className="text-2xl font-bold text-rose-700 dark:text-rose-400 flex items-center">
+                                                    <AlertCircle className="w-6 h-6 mr-2 text-rose-600 dark:text-rose-400" /> Breaking Changes
+                                                </h3>
                                                 <div className="grid gap-3">
                                                     {diffResult.breakingChanges.map((change: string, idx: number) => (
-                                                        <div key={idx} className="p-4 border border-red-500/50 bg-red-500/5 rounded-xl text-red-200 text-sm">
-                                                            {change}
+                                                        <div key={idx} className="p-4 border border-rose-500/30 bg-rose-500/10 dark:bg-rose-950/40 rounded-xl text-rose-950 dark:text-rose-200 text-sm font-medium shadow-sm flex items-start gap-3">
+                                                            <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                                                            <span className="leading-relaxed">{change}</span>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -827,10 +909,10 @@ export default function Home() {
 
                                         {/* Full Diff Table */}
                                         <div className="space-y-4">
-                                            <h3 className="text-2xl font-bold">Endpoint Changes</h3>
-                                            <div className="border border-border rounded-xl overflow-hidden bg-card/50">
+                                            <h3 className="text-2xl font-bold text-foreground">Endpoint Changes</h3>
+                                            <div className="border border-border rounded-xl overflow-hidden glassmorphism shadow-sm">
                                                 <table className="w-full text-sm text-left">
-                                                    <thead className="text-xs uppercase bg-black/40 text-muted-foreground">
+                                                    <thead className="text-xs uppercase bg-muted/70 text-muted-foreground font-semibold">
                                                         <tr>
                                                             <th className="px-6 py-4 border-b border-border">Endpoint</th>
                                                             <th className="px-6 py-4 border-b border-border">Method</th>
@@ -838,29 +920,29 @@ export default function Home() {
                                                             <th className="px-6 py-4 border-b border-border">Details</th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody>
+                                                    <tbody className="divide-y divide-border">
                                                         {diffResult.addedEndpoints?.map((ep: any, idx: number) => (
-                                                            <tr key={`add-${idx}`} className="border-b border-border/50 hover:bg-white/5">
-                                                                <td className="px-6 py-3 font-mono text-foreground/90">{ep.path}</td>
-                                                                <td className="px-6 py-3"><Badge variant="outline" className="text-green-400 border-green-500/50">{ep.method}</Badge></td>
-                                                                <td className="px-6 py-3 text-green-500 font-medium">Added</td>
-                                                                <td className="px-6 py-3 text-muted-foreground">-</td>
+                                                            <tr key={`add-${idx}`} className="hover:bg-muted/40 transition-colors">
+                                                                <td className="px-6 py-3.5 font-mono text-foreground font-medium">{ep.path}</td>
+                                                                <td className="px-6 py-3.5"><Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/10 font-bold">{ep.method}</Badge></td>
+                                                                <td className="px-6 py-3.5 text-emerald-700 dark:text-emerald-400 font-bold">Added</td>
+                                                                <td className="px-6 py-3.5 text-muted-foreground">-</td>
                                                             </tr>
                                                         ))}
                                                         {diffResult.removedEndpoints?.map((ep: any, idx: number) => (
-                                                            <tr key={`rem-${idx}`} className="border-b border-border/50 hover:bg-white/5">
-                                                                <td className="px-6 py-3 font-mono text-foreground/90">{ep.path}</td>
-                                                                <td className="px-6 py-3"><Badge variant="outline" className="text-red-400 border-red-500/50">{ep.method}</Badge></td>
-                                                                <td className="px-6 py-3 text-red-500 font-medium">Removed</td>
-                                                                <td className="px-6 py-3 text-muted-foreground">-</td>
+                                                            <tr key={`rem-${idx}`} className="hover:bg-muted/40 transition-colors">
+                                                                <td className="px-6 py-3.5 font-mono text-foreground font-medium">{ep.path}</td>
+                                                                <td className="px-6 py-3.5"><Badge variant="outline" className="text-rose-700 dark:text-rose-400 border-rose-500/40 bg-rose-500/10 font-bold">{ep.method}</Badge></td>
+                                                                <td className="px-6 py-3.5 text-rose-700 dark:text-rose-400 font-bold">Removed</td>
+                                                                <td className="px-6 py-3.5 text-muted-foreground">-</td>
                                                             </tr>
                                                         ))}
                                                         {diffResult.modifiedEndpoints?.map((ep: any, idx: number) => (
-                                                            <tr key={`mod-${idx}`} className="border-b border-border/50 hover:bg-white/5">
-                                                                <td className="px-6 py-3 font-mono text-foreground/90">{ep.path}</td>
-                                                                <td className="px-6 py-3"><Badge variant="outline" className="text-yellow-400 border-yellow-500/50">{ep.method}</Badge></td>
-                                                                <td className="px-6 py-3 text-yellow-500 font-medium">Modified</td>
-                                                                <td className="px-6 py-3 text-muted-foreground">{ep.changes}</td>
+                                                            <tr key={`mod-${idx}`} className="hover:bg-muted/40 transition-colors">
+                                                                <td className="px-6 py-3.5 font-mono text-foreground font-medium">{ep.path}</td>
+                                                                <td className="px-6 py-3.5"><Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-500/40 bg-amber-500/10 font-bold">{ep.method}</Badge></td>
+                                                                <td className="px-6 py-3.5 text-amber-700 dark:text-amber-400 font-bold">Modified</td>
+                                                                <td className="px-6 py-3.5 text-muted-foreground">{ep.changes}</td>
                                                             </tr>
                                                         ))}
                                                     </tbody>
@@ -870,36 +952,72 @@ export default function Home() {
 
                                         {/* Migration Guide */}
                                         <div className="space-y-6 pt-4 border-t border-border">
-                                            <h3 className="text-2xl font-bold flex items-center"><Bot className="w-6 h-6 mr-3 text-primary" /> Migration Guide</h3>
-                                            <div className="p-6 glassmorphism border border-primary/20 rounded-xl bg-primary/5 text-lg leading-relaxed">
+                                            <h3 className="text-2xl font-bold flex items-center text-foreground"><Bot className="w-6 h-6 mr-3 text-primary" /> Migration Guide</h3>
+                                            <div className="p-6 glassmorphism border border-primary/30 rounded-xl bg-primary/5 text-foreground text-base leading-relaxed font-medium">
                                                 {diffResult.summary}
                                             </div>
 
                                             <div className="space-y-4">
-                                                <h4 className="text-lg font-bold text-muted-foreground uppercase tracking-widest text-sm">Steps to Convert</h4>
+                                                <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Steps to Convert</h4>
                                                 <ol className="list-decimal list-inside space-y-3">
                                                     {diffResult.migrationSteps?.map((step: string, idx: number) => (
-                                                        <li key={idx} className="pl-2 leading-relaxed text-foreground/90">{step}</li>
+                                                        <li key={idx} className="pl-2 leading-relaxed text-foreground font-medium">{step}</li>
                                                     ))}
                                                 </ol>
                                             </div>
 
                                             {diffResult.codePatches?.length > 0 && (
-                                                <div className="space-y-4 pt-4">
-                                                    <h4 className="text-lg font-bold text-muted-foreground uppercase tracking-widest text-sm">Code Patches</h4>
+                                                <div className="space-y-6 pt-4">
+                                                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                                                        <Terminal className="w-4 h-4 text-primary" /> Code Patches
+                                                    </h4>
                                                     {diffResult.codePatches.map((patch: any, idx: number) => (
-                                                        <div key={idx} className="border border-border overflow-hidden rounded-xl bg-card">
-                                                            <div className="p-4 border-b border-border bg-black/40">
-                                                                <p className="font-medium text-sm">{patch.description}</p>
-                                                            </div>
-                                                            <div className="grid grid-cols-2 divide-x divide-border">
-                                                                <div className="p-4 bg-red-500/5 text-red-200 font-mono text-xs overflow-x-auto">
-                                                                    <div className="mb-2 text-[#ff6b6b] font-bold text-[10px] uppercase tracking-wider">Before</div>
-                                                                    <pre><code>{patch.before}</code></pre>
+                                                        <div key={idx} className="border border-border/80 dark:border-slate-800 overflow-hidden rounded-xl bg-card dark:bg-[#0B0F19] text-foreground dark:text-slate-100 shadow-md font-mono text-xs">
+                                                            {/* VS Code Editor Header */}
+                                                            <div className="px-4 py-2.5 border-b border-border/80 dark:border-slate-800/80 bg-muted/60 dark:bg-[#121826] flex items-center justify-between">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="flex gap-1.5">
+                                                                        <div className="w-3 h-3 rounded-full bg-rose-500/80" />
+                                                                        <div className="w-3 h-3 rounded-full bg-amber-500/80" />
+                                                                        <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+                                                                    </div>
+                                                                    <span className="font-sans text-xs font-semibold text-foreground/90 dark:text-slate-300 tracking-wide">{patch.description}</span>
                                                                 </div>
-                                                                <div className="p-4 bg-green-500/5 text-green-200 font-mono text-xs overflow-x-auto">
-                                                                    <div className="mb-2 text-[#51cf66] font-bold text-[10px] uppercase tracking-wider">After</div>
-                                                                    <pre><code>{patch.after}</code></pre>
+                                                                <button
+                                                                    className="text-[11px] font-sans flex items-center gap-1.5 text-muted-foreground hover:text-foreground dark:text-slate-400 dark:hover:text-slate-100 transition-colors px-2.5 py-1 rounded-md border border-border/60 dark:border-slate-800 bg-background/80 dark:bg-slate-800/60 hover:bg-muted dark:hover:bg-slate-800 shadow-xs"
+                                                                    onClick={(e) => {
+                                                                        navigator.clipboard.writeText(`// Before:\n${patch.before}\n\n// After:\n${patch.after}`);
+                                                                        const btn = e.currentTarget;
+                                                                        const orig = btn.innerHTML;
+                                                                        btn.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-bold">Copied!</span>';
+                                                                        setTimeout(() => btn.innerHTML = orig, 2000);
+                                                                    }}
+                                                                >
+                                                                    <Copy className="w-3.5 h-3.5" />
+                                                                    <span>Copy Patch</span>
+                                                                </button>
+                                                            </div>
+                                                            {/* VS Code Light & Dark Diff Comparison Grid */}
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/80 dark:divide-slate-800">
+                                                                <div className="flex flex-col bg-rose-50/50 dark:bg-[#0C101A]">
+                                                                    <div className="px-4 py-2 bg-rose-500/15 dark:bg-rose-950/40 border-b border-rose-200/80 dark:border-slate-800/80 flex items-center justify-between">
+                                                                        <span className="text-rose-800 dark:text-rose-400 font-bold text-[10px] uppercase tracking-widest flex items-center gap-1.5">
+                                                                            <span className="w-2 h-2 rounded-full bg-rose-500"></span> Before (Legacy)
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="p-4 bg-rose-50/70 dark:bg-[#0C101A] text-rose-950 dark:text-rose-200 overflow-x-auto selection:bg-rose-200 dark:selection:bg-rose-900/50 leading-relaxed font-mono text-[12px] font-medium">
+                                                                        <pre><code>{patch.before}</code></pre>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-col bg-emerald-50/50 dark:bg-[#0C101A]">
+                                                                    <div className="px-4 py-2 bg-emerald-500/15 dark:bg-emerald-950/40 border-b border-emerald-200/80 dark:border-slate-800/80 flex items-center justify-between">
+                                                                        <span className="text-emerald-800 dark:text-emerald-400 font-bold text-[10px] uppercase tracking-widest flex items-center gap-1.5">
+                                                                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span> After (Updated)
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="p-4 bg-emerald-50/70 dark:bg-[#0C101A] text-emerald-950 dark:text-emerald-200 overflow-x-auto selection:bg-emerald-200 dark:selection:bg-emerald-900/50 leading-relaxed font-mono text-[12px] font-medium">
+                                                                        <pre><code>{patch.after}</code></pre>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -941,11 +1059,7 @@ export default function Home() {
                                         {auditLoading ? "Scanning for vulnerabilities..." : "Run Security Audit"}
                                     </Button>
 
-                                    {auditError && (
-                                        <div className="p-4 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-xl">
-                                            {auditError}
-                                        </div>
-                                    )}
+                                    <FriendlyErrorBox error={auditError} />
                                 </div>
 
                                 {auditResult && (
@@ -1070,11 +1184,7 @@ export default function Home() {
                                     >
                                         {intentLoading ? "Generating Integration..." : "Generate Integration"}
                                     </Button>
-                                    {intentError && (
-                                        <div className="p-4 bg-destructive/10 text-destructive text-sm rounded-xl">
-                                            {intentError}
-                                        </div>
-                                    )}
+                                    <FriendlyErrorBox error={intentError} />
                                 </div>
 
                                 {intentResult && (
@@ -1283,12 +1393,7 @@ export default function Home() {
                                                     ))}
                                                 </div>
                                             </div>
-                                            {error && (
-                                                <div className="w-full mt-2 p-4 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-xl flex items-center">
-                                                    <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
-                                                    {error}
-                                                </div>
-                                            )}
+                                            <FriendlyErrorBox error={error} />
                                         </div>
                                     </div>
 

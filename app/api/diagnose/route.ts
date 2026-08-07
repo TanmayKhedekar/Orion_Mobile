@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
+import { aggressiveTrimSpec } from '@/lib/specTrimmer';
 
 let groq: Groq;
 try {
@@ -24,13 +25,22 @@ function safeParseJSON(raw: string) {
 
 export async function POST(req: Request) {
     try {
-        const { status, responseBody, requestHeaders, requestUrl, requestMethod, requestBody } = await req.json();
+        const body = await req.json();
+        const { status, responseBody, requestHeaders, requestUrl, requestMethod, requestBody, spec } = body;
 
         if (!process.env.GROQ_API_KEY) {
             return NextResponse.json(
                 { error: 'Groq API key not configured' },
                 { status: 500 }
             );
+        }
+
+        let trimmedSpec = null;
+        if (spec) {
+            try {
+                const parsed = typeof spec === 'string' ? JSON.parse(spec) : spec;
+                trimmedSpec = aggressiveTrimSpec(parsed);
+            } catch (e) { }
         }
 
         const systemPrompt = `You are an expert API debugging assistant. You must analyze the provided API error details and return a JSON response diagnosing the problem.
@@ -51,7 +61,7 @@ Method: ${requestMethod}
 URL: ${requestUrl}
 Headers: ${JSON.stringify(requestHeaders)}
 Request Body: ${requestBody || 'None'}
-Response Body: ${responseBody}`;
+Response Body: ${responseBody}${trimmedSpec ? `\nOpenAPI Spec Context: ${JSON.stringify(trimmedSpec)}` : ''}`;
 
         const completion = await groq.chat.completions.create({
             messages: [
@@ -80,10 +90,43 @@ Response Body: ${responseBody}`;
 
         return NextResponse.json(jsonResult);
     } catch (error: any) {
-        console.error('Groq Diagnose API Error:', error);
-        return NextResponse.json(
-            { error: error?.message || 'An error occurred diagnosing the issue.' },
-            { status: 500 }
-        );
+        console.error('Route error:', error);
+
+        const errorMessage = error?.message || error?.error?.message || '';
+        const status = error?.status || 500;
+
+        // Token limit exceeded
+        if (status === 413 || errorMessage.includes('Request too large') || errorMessage.includes('tokens per minute')) {
+            return NextResponse.json({
+                error: 'spec_too_large',
+                userMessage: 'This API spec is too large to process on our current plan. We\'ve loaded the first 15 endpoints for you — try using a smaller spec or a specific section of this API.',
+                tip: 'Large specs like Spotify or OpenAI work best with targeted queries on specific endpoint groups.'
+            }, { status: 413 });
+        }
+
+        // Context length exceeded
+        if (status === 400 && errorMessage.includes('reduce the length')) {
+            return NextResponse.json({
+                error: 'context_too_long',
+                userMessage: 'This API spec has too many endpoints to generate a complete SDK at once. Showing results for the first 15 endpoints.',
+                tip: 'Try loading a smaller API spec for full SDK generation.'
+            }, { status: 400 });
+        }
+
+        // Rate limit
+        if (status === 429) {
+            return NextResponse.json({
+                error: 'rate_limit',
+                userMessage: 'Daily AI quota reached. Please try again in a few minutes.',
+                tip: 'Our free-tier AI plan resets every hour.'
+            }, { status: 429 });
+        }
+
+        // Generic fallback
+        return NextResponse.json({
+            error: 'ai_error',
+            userMessage: 'Something went wrong with the AI response. Please try again.',
+        }, { status: 500 });
     }
 }
+
