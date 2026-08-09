@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { parseOpenApiUrl } from "@/services/openapi";
 import { fetchAndParseSpec, fetchRawSpecJSON } from "@/app/actions/openapi";
 import { ApiSpec, ApiEndpoint, ChatMessage } from "@/types";
@@ -142,6 +142,11 @@ export default function Home() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState("");
     const [chatLoading, setChatLoading] = useState(false);
+    const chatEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages, chatLoading]);
 
     const [testParams, setTestParams] = useState<Record<string, string>>({});
     const [testResponse, setTestResponse] = useState<any>(null);
@@ -1191,11 +1196,11 @@ export default function Home() {
                                     <div className="space-y-8 mt-12 animate-in fade-in slide-in-from-bottom-4">
                                         {/* Auth Notes */}
                                         {intentResult.authNotes && (
-                                            <div className="bg-yellow-500/10 border border-yellow-500/50 text-yellow-500 p-6 rounded-xl flex items-start space-x-4">
-                                                <AlertCircle className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                                            <div className="bg-amber-500/10 border border-amber-500/30 text-amber-950 dark:text-amber-200 p-6 rounded-xl flex items-start space-x-4 shadow-sm">
+                                                <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                                                 <div>
-                                                    <h3 className="font-bold text-lg mb-1">Auth Notes</h3>
-                                                    <p className="text-sm opacity-90">{intentResult.authNotes}</p>
+                                                    <h3 className="font-bold text-lg mb-1 text-amber-900 dark:text-amber-300">Auth Notes</h3>
+                                                    <p className="text-sm leading-relaxed opacity-90">{intentResult.authNotes}</p>
                                                 </div>
                                             </div>
                                         )}
@@ -1213,7 +1218,7 @@ export default function Home() {
                                                             <div className="flex-1 z-10">
                                                                 <div className="font-bold text-lg">{step.title}</div>
                                                                 <p className="text-muted-foreground text-sm mt-1">{step.description}</p>
-                                                                {step.api && <Badge variant="outline" className="mt-2">{step.api}</Badge>}
+                                                                {step.api && <Badge variant="outline" className="mt-2 text-primary border-primary/30 bg-primary/5 font-semibold">{step.api}</Badge>}
                                                             </div>
                                                             <div className="absolute right-0 top-0 bottom-0 pr-4 flex items-center opacity-10 blur-sm pointer-events-none">
                                                                 <span className="text-6xl font-black">{idx + 1}</span>
@@ -1224,8 +1229,8 @@ export default function Home() {
                                             </div>
                                         )}
                                         {/* Code Tabs */}
-                                        <div className="border border-zinc-800 rounded-xl bg-black overflow-hidden shadow-2xl">
-                                            <div className="flex items-center justify-between border-b border-zinc-800 bg-black px-3 pt-2">
+                                        <div className="border border-border/80 dark:border-zinc-800 rounded-xl bg-card dark:bg-[#0B0F19] overflow-hidden shadow-lg">
+                                            <div className="flex items-center justify-between border-b border-border/80 dark:border-zinc-800 bg-muted/60 dark:bg-[#121826] px-3 pt-2">
                                                 <div className="flex items-center space-x-1">
                                                     {[
                                                         { id: "python", label: "Python" },
@@ -1237,8 +1242,8 @@ export default function Home() {
                                                             onClick={() => setActiveCodeTab(tab.id as any)}
                                                             className={`px-5 py-2.5 text-xs font-mono font-bold transition-all rounded-t-lg ${
                                                                 activeCodeTab === tab.id
-                                                                    ? 'bg-zinc-900 text-emerald-400 border-b-2 border-emerald-400'
-                                                                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
+                                                                    ? 'bg-background dark:bg-[#0D131F] text-emerald-700 dark:text-emerald-400 border-b-2 border-emerald-600 dark:border-emerald-400 shadow-xs'
+                                                                    : 'text-muted-foreground hover:text-foreground dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-muted/40 dark:hover:bg-zinc-900/60'
                                                             }`}
                                                         >
                                                             {tab.label}
@@ -1253,16 +1258,16 @@ export default function Home() {
                                                         navigator.clipboard.writeText(currentCode);
                                                         const btn = e.currentTarget;
                                                         const orig = btn.innerHTML;
-                                                        btn.innerHTML = '<span class="text-emerald-400 font-bold">Copied!</span>';
+                                                        btn.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-bold">Copied!</span>';
                                                         setTimeout(() => btn.innerHTML = orig, 2000);
                                                     }}
-                                                    className="px-3 py-1 text-xs font-mono text-zinc-400 hover:text-zinc-100 flex items-center gap-1.5 transition-colors"
+                                                    className="px-3 py-1 text-xs font-mono text-muted-foreground hover:text-foreground dark:text-zinc-400 dark:hover:text-zinc-100 flex items-center gap-1.5 transition-colors"
                                                 >
                                                     <Copy className="w-3.5 h-3.5" />
                                                     <span>Copy</span>
                                                 </button>
                                             </div>
-                                            <div className="p-6 overflow-x-auto text-sm font-mono text-emerald-400 bg-black leading-relaxed">
+                                            <div className="p-6 overflow-x-auto text-sm font-mono text-emerald-900 dark:text-emerald-300 bg-emerald-50/40 dark:bg-[#0D131F] leading-relaxed">
                                                 <pre>
                                                     <code>
                                                         {activeCodeTab === "python" ? intentResult.code :
@@ -2000,6 +2005,7 @@ export default function Home() {
                                             </div>
                                         </div>
                                     )}
+                                    <div ref={chatEndRef} />
                                 </div>
                                 <div className="p-4 border-t border-border bg-card/50">
                                     <div className="relative">
