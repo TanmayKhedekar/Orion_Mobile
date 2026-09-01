@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from 'next/image';
 import { createUserWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
@@ -54,7 +55,7 @@ export default function SignupPage() {
     return (
         <div className="flex min-h-screen items-center justify-center bg-background p-4 flex-col">
             <div className="mb-8 flex flex-col items-center">
-                <img src="/logo.png" alt="Orion" className="h-28 w-auto object-contain mb-4 dark:invert-0 invert" />
+                <Image src="/logo.png" alt="Orion" width={112} height={112} className="h-28 w-auto object-contain mb-4 dark:invert-0 invert" priority />
                 <h1 className="text-2xl font-bold tracking-tight">API Intelligence Layer</h1>
             </div>
 

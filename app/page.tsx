@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Image from 'next/image';
 import { parseOpenApiUrl } from "@/services/openapi";
 import { fetchAndParseSpec, fetchRawSpecJSON } from "@/app/actions/openapi";
 import { ApiSpec, ApiEndpoint, ChatMessage } from "@/types";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Link, Send, Code, Play, AlertCircle, ChevronRight, Check, Search, Shield, Copy, Sun, Moon, X, Download, Link2, Sparkles, Plus, Trash2, Save, PlusCircle, MinusCircle, RefreshCw, Terminal, AlertTriangle } from "lucide-react";
+import { Bot, Link, Send, Code, Play, AlertCircle, ChevronRight, Check, Search, Shield, Copy, Sun, Moon, X, Download, Link2, Sparkles, Plus, Trash2, Save, PlusCircle, MinusCircle, RefreshCw, Terminal, AlertTriangle, Menu, Home as HomeIcon, User, ArrowLeft, Settings } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { useAuth } from "@/context/AuthContext";
 import { LogOut } from "lucide-react";
@@ -194,6 +195,13 @@ export default function Home() {
     ]);
     const [isVarStoreOpen, setIsVarStoreOpen] = useState(true);
 
+    // Mobile presentation state (UI only)
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [mobileAiOpen, setMobileAiOpen] = useState(false);
+    const [mobileExplorerList, setMobileExplorerList] = useState(true);
+    const [endpointSearch, setEndpointSearch] = useState("");
+    const [methodFilter, setMethodFilter] = useState<string>("ALL");
+
     const variableStoreRef = React.useRef(variableStore);
     useEffect(() => {
         variableStoreRef.current = variableStore;
@@ -218,6 +226,66 @@ export default function Home() {
         }
         localStorage.setItem("orion_theme", theme);
     }, [theme]);
+
+    useEffect(() => {
+        if (mobileNavOpen || mobileAiOpen) {
+            document.body.classList.add("scroll-lock");
+        } else {
+            document.body.classList.remove("scroll-lock");
+        }
+        return () => document.body.classList.remove("scroll-lock");
+    }, [mobileNavOpen, mobileAiOpen]);
+
+    // Keep the nav's aria-hidden attribute as a literal in JSX (to satisfy lint),
+    // and update it imperatively whenever mobileNavOpen changes.
+    useEffect(() => {
+        const el = document.getElementById('mobile-nav');
+        if (el) {
+            el.setAttribute('aria-hidden', mobileNavOpen ? 'false' : 'true');
+        }
+    }, [mobileNavOpen]);
+
+    useEffect(() => {
+        if (spec) {
+            setMobileExplorerList(true);
+        }
+    }, [spec]);
+
+    const filteredEndpoints = spec?.endpoints.filter((ep) => {
+        const q = endpointSearch.toLowerCase().trim();
+        const matchesSearch = !q ||
+            ep.path.toLowerCase().includes(q) ||
+            (ep.summary || "").toLowerCase().includes(q) ||
+            (ep.description || "").toLowerCase().includes(q) ||
+            (ep.operationId || "").toLowerCase().includes(q);
+        const matchesMethod = methodFilter === "ALL" || ep.method.toUpperCase() === methodFilter;
+        return matchesSearch && matchesMethod;
+    }) ?? [];
+
+    const handleSelectEndpoint = (ep: ApiEndpoint) => {
+        setSelectedEndpoint(ep);
+        setTestResponse(null);
+        setTestParams({});
+        setDiagnosisResult(null);
+        setChainSuggestions([]);
+        setMobileExplorerList(false);
+        setMobileNavOpen(false);
+    };
+
+    const handleSetMode = (nextMode: "explorer" | "intent" | "diff" | "audit") => {
+        setMode(nextMode);
+        setMobileNavOpen(false);
+    };
+
+    const handleGoHome = () => {
+        setSpec(null);
+        setUrl("");
+        setMode("explorer");
+        setMobileNavOpen(false);
+        setMobileExplorerList(true);
+    };
+
+    const METHOD_FILTERS = ["ALL", "GET", "POST", "PUT", "DELETE", "PATCH"] as const;
 
     const handleParse = async (overrideUrl?: string) => {
         const targetUrl = overrideUrl || url;
@@ -604,13 +672,268 @@ export default function Home() {
         }
     };
 
+    const renderEndpointFilters = () => (
+        <div className="scroll-x-touch flex gap-2 pb-1 -mx-1 px-1">
+            {METHOD_FILTERS.map((m) => (
+                <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMethodFilter(m)}
+                    className={`filter-chip ${methodFilter === m ? "active" : ""}`}
+                >
+                    {m}
+                </button>
+            ))}
+        </div>
+    );
+
+    const renderEndpointList = (compact = false) => (
+        <div className={`space-y-2 ${compact ? "" : "flex-1 overflow-y-auto"}`}>
+            {filteredEndpoints.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-8 px-4 border border-dashed border-border rounded-xl">
+                    No endpoints match your search.
+                </div>
+            ) : (
+                filteredEndpoints.map((ep, idx) => (
+                    <button
+                        key={`${ep.method}-${ep.path}-${idx}`}
+                        type="button"
+                        onClick={() => handleSelectEndpoint(ep)}
+                        className={`endpoint-card ${selectedEndpoint === ep ? "active" : ""}`}
+                    >
+                        <span className={`method-badge ${getMethodColor(ep.method)}`}>
+                            {ep.method}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                            <div className={`font-mono text-xs break-anywhere ${selectedEndpoint === ep ? "text-foreground font-semibold" : "text-foreground/80"}`}>
+                                {ep.path}
+                            </div>
+                            {(ep.summary || ep.description) && (
+                                <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                                    {ep.summary || ep.description}
+                                </div>
+                            )}
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    </button>
+                ))
+            )}
+        </div>
+    );
+
+    const renderAiChatPanel = (mobile = false) => (
+        <>
+            <div className={`${mobile ? "p-3 ai-header" : "p-4"} border-b border-border bg-card/80 backdrop-blur font-medium flex items-center justify-between flex-shrink-0 ai-header`}>
+                <div className="flex items-center space-x-2">
+                    {mobile && (
+                        <Button variant="ghost" size="icon" className="min-touch h-10 w-10" onClick={() => setMobileAiOpen(false)} aria-label="Back">
+                            <ArrowLeft className="w-5 h-5" />
+                        </Button>
+                    )}
+                    <Bot className="w-5 h-5 text-primary" />
+                    <span>AI Assistant</span>
+                </div>
+                {mobile && (
+                    <Button variant="ghost" size="icon" className="min-touch h-10 w-10" onClick={() => setMobileAiOpen(false)} aria-label="Close AI Assistant">
+                        <X className="w-5 h-5" />
+                    </Button>
+                )}
+            </div>
+            <div className="ai-mobile-content flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 min-h-0">
+                {messages.filter(m => m.role !== 'system').length === 0 && (
+                    <div className="text-center text-sm text-muted-foreground p-4 rounded-xl border border-dashed border-border">
+                        <Bot className="w-8 h-8 mx-auto mb-2 text-primary/60" />
+                        How can I help? Ask me to write Python code, explain auth, or generate a cURL command for this endpoint!
+                    </div>
+                )}
+                {messages.filter(m => m.role !== 'system').map((m, idx) => (
+                    <div key={idx} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                        <div className={`ai-message ${m.role === 'user' ? 'user' : 'assistant'}`}>
+                            <div className={`px-0 py-0 break-anywhere ${m.role === 'user' ? 'text-[13px] whitespace-pre-wrap' : ''}`}>
+                                {m.role === 'user' ? m.content : <MessageContent content={m.content} theme={theme} />}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {chatLoading && (
+                    <div className="flex items-start">
+                        <div className="text-sm px-4 py-2.5 rounded-2xl bg-accent border border-white/5 rounded-tl-sm text-muted-foreground flex space-x-1">
+                            <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"></span>
+                            <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce delay-75"></span>
+                            <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce delay-150"></span>
+                        </div>
+                    </div>
+                )}
+                <div ref={chatEndRef} />
+            </div>
+            <div className="ai-mobile-input p-4 border-t border-border bg-card/30 flex-shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <div className="relative">
+                    <Textarea
+                        value={chatInput}
+                        onChange={e => setChatInput(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSendMessage(chatInput);
+                            }
+                        }}
+                        placeholder="Ask the AI..."
+                        className="resize-none pr-12 min-h-[52px] py-3 glassmorphism text-base"
+                    />
+                    <Button
+                        size="icon"
+                        variant="ghost"
+                        className="absolute right-2 top-2 min-touch h-10 w-10 text-muted-foreground hover:text-primary"
+                        onClick={() => handleSendMessage(chatInput)}
+                        aria-label="Send message"
+                    >
+                        <Send className="w-4 h-4" />
+                    </Button>
+                </div>
+                <div className="ai-quick-actions scroll-x-touch flex gap-2 mt-2 pt-1">
+                    {["Generate Python Code", "Generate cURL", "Explain Endpoint"].map((suggestion) => (
+                        <button
+                            key={suggestion}
+                            type="button"
+                            onClick={() => handleSendMessage(suggestion)}
+                            className="text-xs whitespace-nowrap hover:bg-primary/20 hover:text-primary transition-colors border border-white/10 px-3 py-2 rounded-full min-h-[36px]"
+                        >
+                            {suggestion}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </>
+    );
+
     return (
-        <div className="flex h-screen overflow-hidden bg-background relative">
+        <div className="app-shell flex bg-background relative">
+
+            {/* Mobile drawer overlay */}
+            {mobileNavOpen && (
+                <div
+                    className={`mobile-drawer-overlay lg:hidden open`}
+                    onClick={() => setMobileNavOpen(false)}
+                    aria-hidden="false"
+                />
+            )}
+
+            {/* Mobile navigation drawer */}
+            <nav
+                id="mobile-nav"
+                className={`mobile-drawer lg:hidden ${mobileNavOpen ? "open" : ""}`}
+                aria-label="Main navigation"
+                aria-hidden="true"
+            >
+                <div className="mobile-drawer__header">
+                    <div className="flex items-center gap-2">
+                        <Image src="/Orion.png" alt="Orion" width={28} height={28} className="h-7 w-auto dark:invert-0 invert" priority />
+                        <span className="font-display font-bold text-lg">Orion</span>
+                    </div>
+                    <Button variant="ghost" size="icon" className="min-touch" onClick={() => setMobileNavOpen(false)} aria-label="Close menu">
+                        <X className="w-5 h-5" />
+                    </Button>
+                </div>
+                <div className="mobile-drawer__body">
+                    <div className="space-y-1 mb-4">
+                        <button type="button" className="mobile-drawer__nav-item" onClick={handleGoHome}>
+                            <HomeIcon className="w-5 h-5" />
+                            Home
+                        </button>
+                        <button type="button" className={`mobile-drawer__nav-item ${mode === "explorer" ? "active" : ""}`} onClick={() => handleSetMode("explorer")}>
+                            <Search className="w-5 h-5" />
+                            Explorer
+                        </button>
+                        <button type="button" className={`mobile-drawer__nav-item ${mode === "intent" ? "active" : ""}`} onClick={() => handleSetMode("intent")}>
+                            <Sparkles className="w-5 h-5" />
+                            Intent Mode
+                        </button>
+                        <button type="button" className={`mobile-drawer__nav-item ${mode === "diff" ? "active" : ""}`} onClick={() => handleSetMode("diff")}>
+                            <RefreshCw className="w-5 h-5" />
+                            API Diff
+                        </button>
+                        <button type="button" className={`mobile-drawer__nav-item ${mode === "audit" ? "active" : ""}`} onClick={() => handleSetMode("audit")}>
+                            <Shield className="w-5 h-5" />
+                            Security Audit
+                        </button>
+                    </div>
+
+                    {spec && mode === "explorer" && (
+                        <div className="border-t border-border pt-4 space-y-3">
+                            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">Endpoints</p>
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <Input
+                                    value={endpointSearch}
+                                    onChange={(e) => setEndpointSearch(e.target.value)}
+                                    placeholder="Search endpoints..."
+                                    className="pl-9 h-11 glassmorphism"
+                                />
+                            </div>
+                            {renderEndpointFilters()}
+                            {renderEndpointList(true)}
+                        </div>
+                    )}
+
+                    <div className="border-t border-border mt-4 pt-4 space-y-3">
+                        <div className="flex items-center gap-2 px-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            <Settings className="w-3.5 h-3.5 text-primary" />
+                            <span>Settings</span>
+                        </div>
+
+                        {/* Theme Toggle in Mobile Sidebar */}
+                        <button
+                            type="button"
+                            className="mobile-drawer__nav-item w-full flex items-center justify-between"
+                            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                        >
+                            <span className="flex items-center gap-3">
+                                {theme === "dark" ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-blue-400" />}
+                                <span>Theme</span>
+                            </span>
+                            <span className="text-xs px-2.5 py-0.5 rounded-full bg-secondary text-secondary-foreground font-mono capitalize">
+                                {theme}
+                            </span>
+                        </button>
+
+                        {/* Account Info & Auth in Mobile Sidebar */}
+                        {user ? (
+                            <div className="pt-2 border-t border-border/40 space-y-2">
+                                <div className="px-3 py-2 rounded-xl bg-card/60 border border-border/40 text-xs">
+                                    <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Account</p>
+                                    <p className="font-mono font-medium truncate text-foreground mt-0.5" title={user.email || user.displayName || ""}>
+                                        {user.email || user.displayName || "Signed In"}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="mobile-drawer__nav-item text-red-400 hover:text-red-300 w-full"
+                                    onClick={() => { logout(); setMobileNavOpen(false); }}
+                                >
+                                    <LogOut className="w-5 h-5" />
+                                    <span>Logout</span>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="pt-2 border-t border-border/40">
+                                <a
+                                    href="/login"
+                                    className="mobile-drawer__nav-item text-primary hover:bg-primary/10 w-full"
+                                    onClick={() => setMobileNavOpen(false)}
+                                >
+                                    <User className="w-5 h-5" />
+                                    <span>Log In / Sign Up</span>
+                                </a>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </nav>
 
             {/* SDK Generation Modal */}
             {sdkModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-                    <div className="bg-card w-full max-w-4xl max-h-[90vh] rounded-2xl border border-border flex flex-col overflow-hidden shadow-2xl relative">
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-background/80 backdrop-blur-sm p-0 sm:p-4">
+                    <div className="bg-card w-full sm:max-w-4xl max-h-[95vh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-2xl border border-border flex flex-col overflow-hidden shadow-2xl relative">
                         <div className="p-6 border-b border-border flex items-center justify-between bg-black/20">
                             <div>
                                 <h3 className="text-2xl font-bold flex items-center"><Code className="w-6 h-6 mr-3 text-primary" /> Generate SDK</h3>
@@ -703,13 +1026,13 @@ export default function Home() {
                 </div>
             )}
 
-            {/* SIDEBAR - Endpoints & Variable Store */}
+            {/* SIDEBAR - Endpoints & Variable Store (desktop) */}
             {spec && mode === "explorer" && (
                 <>
-                    <div className="w-80 border-r border-border bg-card/50 backdrop-blur-sm flex flex-col h-full z-10 relative">
-                        <div className="p-6 border-b border-border">
-                            <h2 className="font-bold text-xl truncate" title={spec.title}>{spec.title}</h2>
-                            <p className="text-xs text-muted-foreground mt-1 truncate">{spec.baseUrl}</p>
+                    <div className="hidden lg:flex w-80 border-r border-border bg-card/50 backdrop-blur-sm flex-col h-full z-10 relative flex-shrink-0">
+                        <div className="p-4 lg:p-6 border-b border-border flex-shrink-0">
+                            <h2 className="font-bold text-lg lg:text-xl truncate" title={spec.title}>{spec.title}</h2>
+                            <p className="text-xs text-muted-foreground mt-1 truncate break-anywhere">{spec.baseUrl}</p>
 
                             <Button
                                 onClick={() => setSdkModalOpen(true)}
@@ -719,58 +1042,132 @@ export default function Home() {
                                 <Code className="w-4 h-4" />
                                 <span>Generate SDK</span>
                             </Button>
+
+                            <div className="mt-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-bold text-foreground">Explorer</h3>
+                                    <Search className="w-4 h-4 text-muted-foreground" />
+                                </div>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <Input
+                                        value={endpointSearch}
+                                        onChange={(e) => setEndpointSearch(e.target.value)}
+                                        placeholder="Search endpoints..."
+                                        className="pl-9 h-10 glassmorphism"
+                                    />
+                                </div>
+                                {renderEndpointFilters()}
+                            </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                            {spec.endpoints.map((ep, idx) => (
-                                <button
-                                    key={idx}
-                                    onClick={() => {
-                                        setSelectedEndpoint(ep);
-                                        setTestResponse(null);
-                                        setTestParams({});
-                                        setDiagnosisResult(null);
-                                        setChainSuggestions([]);
-                                    }}
-                                    className={`w-full text-left p-3 rounded-lg border transition-all text-sm flex items-center space-x-3 
-                      ${selectedEndpoint === ep
-                                            ? 'bg-surface-raised border-border border-l-2 border-l-accent shadow-theme'
-                                            : 'border-transparent hover:bg-surface-raised/60 dark:hover:bg-white/5'}`}
+                        <div className="flex-1 overflow-y-auto p-4 min-h-0">
+                            {renderEndpointList()}
+                        </div>
+
+                        {/* Desktop Sidebar Settings Footer */}
+                        <div className="p-3 border-t border-border bg-card/30 flex-shrink-0 flex items-center justify-between text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1.5 font-medium text-foreground/80">
+                                <Settings className="w-3.5 h-3.5 text-primary" />
+                                <span>Settings</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 rounded-lg"
+                                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                                    title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
                                 >
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${getMethodColor(ep.method)}`}>
-                                        {ep.method}
-                                    </span>
-                                    <span className={`font-mono text-xs truncate flex-1 ${selectedEndpoint === ep ? 'text-foreground font-semibold' : 'text-foreground/70'}`}>{ep.path}</span>
-                                </button>
-                            ))}
+                                    {theme === "dark" ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-blue-400" />}
+                                </Button>
+                                {user && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                        onClick={logout}
+                                        title="Logout"
+                                    >
+                                        <LogOut className="w-3.5 h-3.5" />
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     </div>
 
-                    <VariableStorePanel
-                        variables={variableStore}
-                        onSaveVariable={(k, v) => setVariableStore(prev => ({ ...prev, [k]: v }))}
-                        onDeleteVariable={(k) => setVariableStore(prev => {
-                            const copy = { ...prev };
-                            delete copy[k];
-                            return copy;
-                        })}
-                        isOpen={isVarStoreOpen}
-                        onToggleOpen={() => setIsVarStoreOpen(!isVarStoreOpen)}
-                    />
+                    <div className="hidden lg:block">
+                        <VariableStorePanel
+                            variables={variableStore}
+                            onSaveVariable={(k, v) => setVariableStore(prev => ({ ...prev, [k]: v }))}
+                            onDeleteVariable={(k) => setVariableStore(prev => {
+                                const copy = { ...prev };
+                                delete copy[k];
+                                return copy;
+                            })}
+                            isOpen={isVarStoreOpen}
+                            onToggleOpen={() => setIsVarStoreOpen(!isVarStoreOpen)}
+                        />
+                    </div>
                 </>
             )}
 
             {/* MAIN CONTENT AREA */}
-            <div className="flex-1 flex flex-col h-full overflow-hidden">
+            <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
 
-                {/* Header / Landing Input */}
-                <header className="flex-none p-6 border-b border-border bg-background z-10 grid grid-cols-3 items-center">
+                {/* Mobile header */}
+                <header className="mobile-header mobile-header--sticky lg:hidden">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="min-touch h-11 w-11 flex-shrink-0"
+                        onClick={() => setMobileNavOpen(true)}
+                        aria-label="Open menu"
+                    >
+                        <Menu className="w-5 h-5" />
+                    </Button>
+                    <div
+                        className="mobile-header__logo cursor-pointer"
+                        onClick={handleGoHome}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleGoHome(); }}
+                    >
+                        <Image src="/Orion.png" alt="Orion" width={28} height={28} className="dark:invert-0 invert" priority />
+                        <span className="font-display font-bold text-base">Orion</span>
+                    </div>
+                    <div className="mobile-header__actions">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                            className="min-touch h-11 w-11 rounded-full"
+                            aria-label="Toggle theme"
+                        >
+                            {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                        </Button>
+                        {user && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={logout}
+                                className="min-touch h-11 w-11 text-muted-foreground"
+                                aria-label="Account"
+                            >
+                                <User className="w-5 h-5" />
+                            </Button>
+                        )}
+                    </div>
+                </header>
+
+                {/* Header / Landing Input (desktop) */}
+                <header className="hidden md:grid flex-none p-4 lg:p-6 border-b border-border bg-background z-10 grid-cols-3 items-center">
                     <div className="flex justify-start">
                         <div
                             className="flex items-center space-x-3 cursor-pointer transition-opacity hover:opacity-80 group"
                             onClick={() => { setSpec(null); setUrl(""); setMode("explorer"); }}
                             title="Go back to Home"
                         >
-                            <img src="/Orion.png" alt="Orion" className="h-[36px] w-auto object-contain dark:invert-0 invert flex-shrink-0" />
+                            <Image src="/Orion.png" alt="Orion" width={36} height={36} className="h-[36px] w-auto object-contain dark:invert-0 invert flex-shrink-0" priority />
                             <span className="font-display font-bold text-xl text-foreground tracking-tight group-hover:text-accent transition-colors">Orion</span>
                         </div>
                     </div>
@@ -824,9 +1221,9 @@ export default function Home() {
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-hidden relative">
+                <main className="flex-1 overflow-y-auto overflow-x-hidden relative min-h-0">
                     {mode === "diff" ? (
-                        <div className="h-full overflow-y-auto w-full bg-background p-8">
+                        <div className="h-full overflow-y-auto w-full bg-background p-4 md:p-8">
                             <div className="max-w-5xl mx-auto space-y-8 pb-24">
                                 <div className="text-center space-y-4 pt-4">
                                     <h2 className="text-3xl font-extrabold tracking-tight">API Diff & Migration</h2>
@@ -835,7 +1232,7 @@ export default function Home() {
                                     </p>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Old Version URL</label>
                                         <Input
@@ -915,8 +1312,8 @@ export default function Home() {
                                         {/* Full Diff Table */}
                                         <div className="space-y-4">
                                             <h3 className="text-2xl font-bold text-foreground">Endpoint Changes</h3>
-                                            <div className="border border-border rounded-xl overflow-hidden glassmorphism shadow-sm">
-                                                <table className="w-full text-sm text-left">
+                                            <div className="table-scroll border border-border rounded-xl glassmorphism shadow-sm">
+                                                <table className="w-full text-sm text-left min-w-[600px]">
                                                     <thead className="text-xs uppercase bg-muted/70 text-muted-foreground font-semibold">
                                                         <tr>
                                                             <th className="px-6 py-4 border-b border-border">Endpoint</th>
@@ -1036,7 +1433,7 @@ export default function Home() {
                             </div>
                         </div>
                     ) : mode === "audit" ? (
-                        <div className="h-full overflow-y-auto w-full bg-background p-8">
+                        <div className="h-full overflow-y-auto w-full bg-background p-4 md:p-8">
                             <div className="max-w-5xl mx-auto space-y-8 pb-24">
                                 <div className="text-center space-y-4 pt-4">
                                     <h2 className="text-3xl font-extrabold tracking-tight">API Security Audit</h2>
@@ -1165,7 +1562,7 @@ export default function Home() {
                             </div>
                         </div>
                     ) : mode === "intent" ? (
-                        <div className="h-full overflow-y-auto w-full bg-background p-8">
+                        <div className="h-full overflow-y-auto w-full bg-background p-4 md:p-8">
                             <div className="max-w-4xl mx-auto space-y-8 pb-24">
                                 <div className="text-center space-y-4 pt-4">
                                     <h2 className="text-3xl font-extrabold tracking-tight">Intent-to-Integration</h2>
@@ -1290,10 +1687,13 @@ export default function Home() {
                                     <div className="flex items-center gap-5">
                                         <div className="relative">
                                             <div className="absolute inset-0 rounded-3xl bg-accent/20 blur-2xl scale-150" />
-                                            <img
+                                            <Image
                                                 src="/Orion.png"
                                                 alt="Orion Logo"
+                                                width={80}
+                                                height={80}
                                                 className="relative h-20 w-auto object-contain dark:invert-0 invert drop-shadow-xl"
+                                                priority
                                             />
                                         </div>
                                         <div className="text-left">
@@ -1319,18 +1719,18 @@ export default function Home() {
 
                                         {/* Central Parsing Input */}
                                         <div className="w-full flex flex-col space-y-4">
-                                            <div className="flex items-center space-x-3">
-                                                <div className="relative flex-1 w-full">
+                                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:space-x-3">
+                                                <div className="relative flex-1 w-full min-w-0">
                                                     <Link className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
                                                     <Input
                                                         value={url}
                                                         onChange={e => setUrl(e.target.value)}
                                                         placeholder="Paste any OpenAPI / Swagger URL — JSON or YAML supported"
-                                                        className="pl-11 h-14 rounded-xl glassmorphism text-base w-full font-mono text-foreground focus-visible:ring-2 focus-visible:ring-accent"
+                                                        className="pl-11 h-12 sm:h-14 rounded-xl glassmorphism text-base w-full font-mono text-foreground focus-visible:ring-2 focus-visible:ring-accent"
                                                         onKeyDown={e => { if (e.key === 'Enter') handleParse(); }}
                                                     />
                                                 </div>
-                                                <Button onClick={() => handleParse()} disabled={loading} size="lg" className="h-14 px-8 rounded-xl font-bold text-base bg-accent text-background hover:opacity-90 transition-all shadow-lg shadow-accent/10">
+                                                <Button onClick={() => handleParse()} disabled={loading} size="lg" className="h-12 sm:h-14 px-8 rounded-xl font-bold text-base bg-accent text-background hover:opacity-90 transition-all shadow-lg shadow-accent/10 w-full sm:w-auto">
                                                     {loading ? "Parsing..." : "Parse API"}
                                                 </Button>
                                             </div>
@@ -1667,18 +2067,18 @@ export default function Home() {
                                     </p>
 
                                     <div className="max-w-xl mx-auto space-y-3">
-                                        <div className="flex items-center space-x-3">
-                                            <div className="relative flex-1 w-full">
+                                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:space-x-3">
+                                            <div className="relative flex-1 w-full min-w-0">
                                                 <Link className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
                                                 <Input
                                                     value={url}
                                                     onChange={e => setUrl(e.target.value)}
                                                     placeholder="Paste any OpenAPI / Swagger URL — JSON or YAML supported"
-                                                    className="pl-11 h-14 rounded-xl glassmorphism text-base w-full font-mono text-foreground focus-visible:ring-2 focus-visible:ring-accent"
+                                                    className="pl-11 h-12 sm:h-14 rounded-xl glassmorphism text-base w-full font-mono text-foreground focus-visible:ring-2 focus-visible:ring-accent"
                                                     onKeyDown={e => { if (e.key === 'Enter') handleParse(); }}
                                                 />
                                             </div>
-                                            <Button onClick={() => handleParse()} disabled={loading} size="lg" className="h-14 px-8 rounded-xl font-bold text-base bg-accent text-background hover:opacity-90 transition-all">
+                                            <Button onClick={() => handleParse()} disabled={loading} size="lg" className="h-12 sm:h-14 px-8 rounded-xl font-bold text-base bg-accent text-background hover:opacity-90 transition-all w-full sm:w-auto">
                                                 {loading ? "Parsing..." : "Parse API"}
                                             </Button>
                                         </div>
@@ -1690,25 +2090,63 @@ export default function Home() {
                             </div>
                         </div>
                     ) : selectedEndpoint ? (
-                        <div className="h-full flex">
+                        <>
+                        {/* Mobile explorer list view */}
+                        {spec && mode === "explorer" && mobileExplorerList && (
+                            <div className="lg:hidden h-full overflow-y-auto p-4 space-y-4 pb-24">
+                                <div className="flex items-center justify-between">
+                                    <h2 className="font-bold text-lg">Explorer</h2>
+                                    <Button variant="outline" size="sm" onClick={() => setSdkModalOpen(true)} className="text-xs">
+                                        <Code className="w-3.5 h-3.5 mr-1" /> SDK
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground break-anywhere">{spec.baseUrl}</p>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <Input
+                                        value={endpointSearch}
+                                        onChange={(e) => setEndpointSearch(e.target.value)}
+                                        placeholder="Search endpoints..."
+                                        className="pl-9 h-11 glassmorphism"
+                                    />
+                                </div>
+                                {renderEndpointFilters()}
+                                {renderEndpointList()}
+                            </div>
+                        )}
+
+                        <div className={`h-full flex flex-col lg:flex-row min-h-0 ${spec && mode === "explorer" && mobileExplorerList ? "hidden lg:flex" : ""}`}>
                             {/* Endpoint Details */}
-                            <div className="flex-1 p-8 overflow-y-auto">
-                                <div className="max-w-3xl mx-auto space-y-8">
-                                    <div>
-                                        <h2 className="text-3xl font-bold mb-2">{selectedEndpoint.summary || selectedEndpoint.operationId || "Endpoint"}</h2>
-                                        <p className="text-muted-foreground">{selectedEndpoint.description}</p>
+                            <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto min-h-0 min-w-0">
+                                <div className="max-w-3xl mx-auto space-y-6 lg:space-y-8">
+                                    {/* Mobile back navigation */}
+                                    <div className="lg:hidden flex items-center gap-2 -mt-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="min-touch -ml-2"
+                                            onClick={() => setMobileExplorerList(true)}
+                                        >
+                                            <ArrowLeft className="w-4 h-4 mr-1" />
+                                            Explorer
+                                        </Button>
                                     </div>
 
-                                    <div className="flex items-center space-x-4 p-4 rounded-xl glassmorphism border border-white/5">
-                                        <Badge variant="outline" className={`text-sm ${getMethodColor(selectedEndpoint.method)}`}>
+                                    <div>
+                                        <h2 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 break-anywhere">{selectedEndpoint.summary || selectedEndpoint.operationId || "Endpoint"}</h2>
+                                        <p className="text-muted-foreground text-sm md:text-base">{selectedEndpoint.description}</p>
+                                    </div>
+
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl glassmorphism border border-white/5">
+                                        <Badge variant="outline" className={`text-sm w-fit ${getMethodColor(selectedEndpoint.method)}`}>
                                             {selectedEndpoint.method}
                                         </Badge>
-                                        <span className="font-mono text-lg text-foreground/90">{selectedEndpoint.path}</span>
+                                        <span className="font-mono text-sm md:text-lg text-foreground/90 break-anywhere">{selectedEndpoint.path}</span>
                                     </div>
 
                                     {/* API Playground */}
                                     <Card className="glassmorphism border-white/10">
-                                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2">
                                             <div>
                                                 <CardTitle className="text-lg">API Playground</CardTitle>
                                                 <CardDescription>Test this endpoint directly with session chain variables</CardDescription>
@@ -1719,7 +2157,7 @@ export default function Home() {
                                                     variant="outline"
                                                     onClick={handleSuggestChain}
                                                     disabled={suggestLoading}
-                                                    className="border-blue-500/50 text-blue-300 hover:bg-blue-500/20 glassmorphism text-xs font-bold flex items-center space-x-1.5"
+                                                    className="border-blue-500/50 text-blue-300 hover:bg-blue-500/20 glassmorphism text-xs font-bold flex items-center space-x-1.5 w-full sm:w-auto"
                                                 >
                                                     <Sparkles className="w-3.5 h-3.5 text-blue-400" />
                                                     <span>{suggestLoading ? "Analyzing..." : "Suggest Chain"}</span>
@@ -1758,13 +2196,15 @@ export default function Home() {
                                                 <div className="space-y-3">
                                                     <h4 className="text-sm font-semibold">Parameters</h4>
                                                     {selectedEndpoint.parameters.map((p, i) => (
-                                                        <div key={i} className="flex gap-4 items-center">
-                                                            <span className="w-1/4 text-sm font-mono text-muted-foreground truncate" title={p.name}>
-                                                                {p.name} {p.required && <span className="text-destructive">*</span>}
-                                                            </span>
-                                                            <Badge variant="secondary" className="text-[10px]">{p.in}</Badge>
+                                                        <div key={i} className="flex flex-col sm:flex-row gap-2 sm:gap-4 sm:items-center">
+                                                            <div className="flex items-center gap-2 sm:w-1/4 min-w-0">
+                                                                <span className="text-sm font-mono text-muted-foreground truncate" title={p.name}>
+                                                                    {p.name} {p.required && <span className="text-destructive">*</span>}
+                                                                </span>
+                                                                <Badge variant="secondary" className="text-[10px] flex-shrink-0">{p.in}</Badge>
+                                                            </div>
                                                             <VariableInput
-                                                                className="flex-1 h-8 text-sm font-mono"
+                                                                className="flex-1 h-10 sm:h-8 text-sm font-mono w-full"
                                                                 placeholder={p.description || "value... (use {{var}})"}
                                                                 value={testParams[p.name] || ''}
                                                                 onValueChange={val => setTestParams({ ...testParams, [p.name]: val })}
@@ -1789,9 +2229,9 @@ export default function Home() {
                                                     </Button>
                                                 </div>
                                                 {customHeaders.map((h, i) => (
-                                                    <div key={i} className="flex gap-3 items-center">
+                                                    <div key={i} className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-center">
                                                         <VariableInput
-                                                            className="w-1/3 h-8 text-sm font-mono"
+                                                            className="w-full sm:w-1/3 h-10 sm:h-8 text-sm font-mono"
                                                             placeholder="Header (e.g. Authorization)"
                                                             value={h.key}
                                                             onValueChange={(val) => {
@@ -1802,7 +2242,7 @@ export default function Home() {
                                                             variables={variableStore}
                                                         />
                                                         <VariableInput
-                                                            className="flex-1 h-8 text-sm font-mono"
+                                                            className="flex-1 h-10 sm:h-8 text-sm font-mono w-full"
                                                             placeholder="Value (e.g. Bearer {{token}})"
                                                             value={h.value}
                                                             onValueChange={(val) => {
@@ -1816,9 +2256,9 @@ export default function Home() {
                                                             variant="ghost"
                                                             size="icon"
                                                             onClick={() => setCustomHeaders(customHeaders.filter((_, idx) => idx !== i))}
-                                                            className="h-8 w-8 text-muted-foreground hover:text-red-400"
+                                                            className="h-10 w-10 sm:h-8 sm:w-8 text-muted-foreground hover:text-red-400 self-end sm:self-auto"
                                                         >
-                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                            <Trash2 className="w-4 h-4" />
                                                         </Button>
                                                     </div>
                                                 ))}
@@ -1842,19 +2282,19 @@ export default function Home() {
                                                 </div>
                                             )}
 
-                                            <Button onClick={handleTestApi} disabled={testLoading} className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground">
+                                            <Button onClick={handleTestApi} disabled={testLoading} className="w-full mt-4 min-h-[48px] bg-primary hover:bg-primary/90 text-primary-foreground">
                                                 {testLoading ? "Testing..." : <><Play className="w-4 h-4 mr-2" /> Execute Request</>}
                                             </Button>
 
                                             {testResponse && (
                                                 <div className="mt-6 space-y-2">
-                                                    <div className="flex items-center space-x-2">
+                                                    <div className="flex items-center space-x-2 flex-wrap gap-2">
                                                         <span className="text-sm font-medium">Response</span>
                                                         <Badge variant={testResponse.status < 400 ? "default" : "destructive"}>
                                                             {testResponse.status} {testResponse.statusText}
                                                         </Badge>
                                                     </div>
-                                                    <div className="p-4 rounded-lg bg-black/50 border border-white/10 font-mono text-sm overflow-x-auto">
+                                                    <div className="p-4 rounded-lg bg-black/50 border border-white/10 font-mono text-sm code-scroll">
                                                         <pre className="text-green-400">
                                                             {JSON.stringify(testResponse.data, null, 2)}
                                                         </pre>
@@ -1969,82 +2409,101 @@ export default function Home() {
                                         </CardContent>
                                     </Card>
 
+                                    {/* Mobile Variable Store */}
+                                    <div className="lg:hidden border border-border rounded-xl overflow-hidden">
+                                        <VariableStorePanel
+                                            variables={variableStore}
+                                            onSaveVariable={(k, v) => setVariableStore(prev => ({ ...prev, [k]: v }))}
+                                            onDeleteVariable={(k) => setVariableStore(prev => {
+                                                const copy = { ...prev };
+                                                delete copy[k];
+                                                return copy;
+                                            })}
+                                            isOpen={isVarStoreOpen}
+                                            onToggleOpen={() => setIsVarStoreOpen(!isVarStoreOpen)}
+                                        />
+                                    </div>
+
                                 </div>
                             </div>
 
-                            {/* AI CHAT PANEL */}
-                            <div className="w-96 border-l border-border bg-card/30 flex flex-col">
-                                <div className="p-4 border-b border-border bg-card/80 backdrop-blur font-medium flex items-center justify-between">
-                                    <div className="flex items-center space-x-2">
-                                        <Bot className="w-5 h-5 text-primary" />
-                                        <span>AI Assistant</span>
-                                    </div>
-                                </div>
-                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                    {messages.filter(m => m.role !== 'system').length === 0 && (
-                                        <div className="text-center text-sm text-muted-foreground p-4">
-                                            Ask me to write Python code, explain auth, or generate a cURL command for this endpoint!
-                                        </div>
-                                    )}
-                                    {messages.filter(m => m.role !== 'system').map((m, idx) => (
-                                        <div key={idx} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                                            <div className={`px-4 py-3 rounded-2xl max-w-[90%] break-words ${m.role === 'user'
-                                                ? 'bg-primary text-primary-foreground rounded-tr-sm text-[13px] whitespace-pre-wrap'
-                                                : 'bg-accent border border-white/5 rounded-tl-sm text-accent-foreground shadow-sm w-full'
-                                                }`}>
-                                                {m.role === 'user' ? m.content : <MessageContent content={m.content} theme={theme} />}
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {chatLoading && (
-                                        <div className="flex items-start">
-                                            <div className="text-sm px-4 py-2.5 rounded-2xl bg-accent border border-white/5 rounded-tl-sm text-muted-foreground flex space-x-1">
-                                                <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"></span>
-                                                <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce delay-75"></span>
-                                                <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce delay-150"></span>
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div ref={chatEndRef} />
-                                </div>
-                                <div className="p-4 border-t border-border bg-card/50">
-                                    <div className="relative">
-                                        <Textarea
-                                            value={chatInput}
-                                            onChange={e => setChatInput(e.target.value)}
-                                            onKeyDown={e => {
-                                                if (e.key === 'Enter' && !e.shiftKey) {
-                                                    e.preventDefault();
-                                                    handleSendMessage(chatInput);
-                                                }
-                                            }}
-                                            placeholder="Ask the AI for code..."
-                                            className="resize-none pr-12 min-h-0 h-[60px] py-3 glassmorphism"
-                                        />
-                                        <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            className="absolute right-2 top-2 h-8 w-8 text-muted-foreground hover:text-primary"
-                                            onClick={() => handleSendMessage(chatInput)}
-                                        >
-                                            <Send className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                    <div className="flex gap-2 mt-2 overflow-x-auto pb-1 pb-scroll">
-                                        {["Generate Python Code", "Generate cURL", "Explain Endpoint"].map((suggestion) => (
-                                            <button
-                                                key={suggestion}
-                                                onClick={() => handleSendMessage(suggestion)}
-                                                className="text-[10px] whitespace-nowrap bg-white/5 hover:bg-primary/20 hover:text-primary transition-colors border border-white/10 px-2.5 py-1 rounded-full"
-                                            >
-                                                {suggestion}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+                            {/* AI CHAT PANEL - Desktop */}
+                            <div className="hidden lg:flex w-96 border-l border-border bg-card/30 flex-col flex-shrink-0 min-h-0">
+                                {renderAiChatPanel(false)}
                             </div>
                         </div>
+                        </>
                     ) : null}
+
+                    {/* AI CHAT PANEL - Mobile full screen (available across all features) */}
+                    <div className={`ai-mobile-panel lg:hidden ${mobileAiOpen ? "open" : ""}`} role="dialog" aria-label="AI Assistant">
+                        {renderAiChatPanel(true)}
+                    </div>
+
+                    {/* Mobile AI FAB (available across all features) */}
+                    {!mobileAiOpen && (
+                        <button
+                            type="button"
+                            className="ai-mobile-fab lg:hidden"
+                            onClick={() => setMobileAiOpen(true)}
+                            aria-label="Open AI Assistant"
+                        >
+                            <Bot className="w-6 h-6" />
+                        </button>
+                    )}
+
+                    {/* Mobile bottom navigation (available across all features) */}
+                    <div className={`mobile-bottom-nav lg:hidden ${mobileAiOpen ? 'hidden' : ''}`} role="navigation" aria-label="Bottom navigation">
+                        <button
+                            type="button"
+                            className={`mobile-bottom-nav__item ${!spec && mode === 'explorer' ? 'active' : ''}`}
+                            onClick={() => handleGoHome()}
+                            aria-label="Home"
+                        >
+                            <HomeIcon className="w-5 h-5" />
+                            <span className="text-[11px]">Home</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            className={`mobile-bottom-nav__item ${spec && mode === 'explorer' ? 'active' : ''}`}
+                            onClick={() => { handleSetMode('explorer'); setMobileExplorerList(true); }}
+                            aria-label="Explorer"
+                        >
+                            <Search className="w-5 h-5" />
+                            <span className="text-[11px]">Explorer</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            className={`mobile-bottom-nav__item ${mode === 'intent' ? 'active' : ''}`}
+                            onClick={() => handleSetMode('intent')}
+                            aria-label="Intent"
+                        >
+                            <Sparkles className="w-5 h-5" />
+                            <span className="text-[11px]">Intent</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            className={`mobile-bottom-nav__item ${mode === 'diff' ? 'active' : ''}`}
+                            onClick={() => handleSetMode('diff')}
+                            aria-label="Diff"
+                        >
+                            <RefreshCw className="w-5 h-5" />
+                            <span className="text-[11px]">Diff</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            className={`mobile-bottom-nav__item ${mode === 'audit' ? 'active' : ''}`}
+                            onClick={() => handleSetMode('audit')}
+                            aria-label="Security"
+                        >
+                            <Shield className="w-5 h-5" />
+                            <span className="text-[11px]">Security</span>
+                        </button>
+                    </div>
                 </main>
             </div >
         </div >

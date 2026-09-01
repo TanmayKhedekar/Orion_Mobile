@@ -52,7 +52,7 @@ export const VariableStorePanel: React.FC<VariableStorePanelProps> = ({
 
     return (
         <div
-            className={`border-r border-border bg-card/60 backdrop-blur-md flex flex-col h-full transition-all duration-300 z-10 relative ${isOpen ? "w-80" : "w-14"
+            className={`border-r border-border bg-card/60 backdrop-blur-md flex flex-col h-full transition-all duration-300 z-10 relative ${isOpen ? "w-full lg:w-80" : "w-14"
                 }`}
         >
             {/* Header with Chain Link Icon */}
