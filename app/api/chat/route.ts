@@ -30,7 +30,7 @@ You must return only the response directly, without formatting it in large code 
                 },
                 ...messages,
             ],
-            model: 'llama-3.3-70b-versatile',
+            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
             temperature: 0.7,
             max_tokens: 1024,
         });

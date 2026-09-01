@@ -70,7 +70,7 @@ Request Body Schema: ${JSON.stringify(nextEndpoint?.requestBody || null, null, 2
                     content: userContent
                 }
             ],
-            model: 'llama-3.3-70b-versatile',
+            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
             temperature: 0.2,
             max_tokens: 1500,
         });

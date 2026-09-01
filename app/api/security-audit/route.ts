@@ -152,7 +152,7 @@ CRITICAL: Your entire response must be a single valid JSON object with no text b
                     content: `Here are the programmatic findings:\n${JSON.stringify(programmaticFindings, null, 2)}`
                 }
             ],
-            model: 'llama-3.3-70b-versatile',
+            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
             temperature: 0.1,
             max_tokens: 4096,
         });

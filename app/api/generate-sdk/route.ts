@@ -58,7 +58,7 @@ CRITICAL: Your entire response must be a single valid JSON object with no text b
                 { role: 'system', content: metaSystemPrompt },
                 { role: 'user', content: userContent }
             ],
-            model: 'llama-3.3-70b-versatile',
+            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
             temperature: 0.1,
             max_tokens: 2000,
         });
@@ -90,7 +90,7 @@ Return ONLY the raw ${language} code for the SDK class. No JSON wrapper. No mark
                 { role: 'system', content: codeSystemPrompt },
                 { role: 'user', content: userContent }
             ],
-            model: 'llama-3.3-70b-versatile',
+            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
             temperature: 0.1,
             max_tokens: 6000,
         });
