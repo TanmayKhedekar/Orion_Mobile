@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Link, Send, Code, Play, AlertCircle, ChevronRight, Check, Search, Shield, Copy, Sun, Moon, X, Download, Link2, Sparkles, Plus, Trash2, Save, PlusCircle, MinusCircle, RefreshCw, Terminal, AlertTriangle, Menu, Home as HomeIcon, User, ArrowLeft, Settings } from "lucide-react";
+import { Bot, Link, Send, Code, Play, AlertCircle, ChevronRight, Check, Search, Shield, Copy, Sun, Moon, X, Download, Link2, Sparkles, Plus, Trash2, Save, PlusCircle, MinusCircle, RefreshCw, Terminal, AlertTriangle, Menu, Home as HomeIcon, User, ArrowLeft, Settings, Mic, MicOff, Radio, Languages } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { useAuth } from "@/context/AuthContext";
 import { LogOut } from "lucide-react";
@@ -18,6 +18,8 @@ import { extractTargetVariables, substituteVariables, ExtractedVar } from "@/lib
 import { VariableInput } from "@/components/VariableInput";
 import { VariableStorePanel } from "@/components/VariableStorePanel";
 import { ApiMetaphorAnimation } from "@/components/ApiMetaphorAnimation";
+import { voiceService } from "@/services/voice/voiceService";
+import { VoiceState } from "@/services/voice/types";
 
 function normalizeAssistantMessage(raw: any): string {
     if (!raw) return '';
@@ -323,6 +325,47 @@ export default function Home() {
     const [endpointSearch, setEndpointSearch] = useState("");
     const [methodFilter, setMethodFilter] = useState<string>("ALL");
     const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+    // Voice AI Speech-to-Text State
+    const [voiceState, setVoiceState] = useState<VoiceState>('IDLE');
+    const [voiceLang, setVoiceLang] = useState<string>('en-US');
+    const [partialTranscript, setPartialTranscript] = useState<string>('');
+
+    useEffect(() => {
+        const unsubscribe = voiceService.onStateChange((s) => {
+            setVoiceState(s);
+        });
+        return () => {
+            unsubscribe();
+            voiceService.cancel();
+        };
+    }, []);
+
+    const handleToggleVoice = async () => {
+        if (voiceState === 'LISTENING' || voiceState === 'TRANSCRIBING') {
+            try {
+                const finalTranscript = await voiceService.stopListening();
+                if (finalTranscript) {
+                    setChatInput(prev => (prev ? `${prev} ${finalTranscript}` : finalTranscript));
+                    setPartialTranscript('');
+                }
+            } catch (e) {
+                console.error('Failed to stop listening:', e);
+            }
+        } else {
+            try {
+                setPartialTranscript('');
+                await voiceService.startListening({
+                    language: voiceLang,
+                    onPartial: (partial) => {
+                        setPartialTranscript(partial);
+                    }
+                });
+            } catch (e: any) {
+                console.error('Failed to start listening:', e);
+            }
+        }
+    };
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -1005,6 +1048,39 @@ export default function Home() {
                 <div ref={chatEndRef} />
             </div>
             <div className="ai-mobile-input p-4 border-t border-border bg-card/30 flex-shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                {/* Voice Listening Active Waveform Indicator */}
+                {(voiceState === 'LISTENING' || voiceState === 'TRANSCRIBING' || partialTranscript) && (
+                    <div className="mb-2 p-2 px-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between text-xs animate-in fade-in duration-200">
+                        <div className="flex items-center space-x-2 min-w-0">
+                            <div className="voice-waveform flex-shrink-0">
+                                <span className="voice-waveform-bar"></span>
+                                <span className="voice-waveform-bar"></span>
+                                <span className="voice-waveform-bar"></span>
+                                <span className="voice-waveform-bar"></span>
+                                <span className="voice-waveform-bar"></span>
+                            </div>
+                            <span className="text-red-400 font-semibold flex-shrink-0">
+                                {voiceState === 'TRANSCRIBING' ? 'Transcribing...' : '🎙️ Listening...'}
+                            </span>
+                            {partialTranscript && (
+                                <span className="text-foreground/80 italic truncate">
+                                    &ldquo;{partialTranscript}&rdquo;
+                                </span>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                voiceService.cancel();
+                                setPartialTranscript('');
+                            }}
+                            className="text-[11px] text-muted-foreground hover:text-foreground underline ml-2 flex-shrink-0"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                )}
+
                 <div className="relative">
                     <Textarea
                         value={chatInput}
@@ -1015,20 +1091,50 @@ export default function Home() {
                                 handleSendMessage(chatInput);
                             }
                         }}
-                        placeholder="Ask the AI..."
-                        className="resize-none pr-12 min-h-[52px] py-3 glassmorphism text-base"
+                        placeholder={voiceState === 'LISTENING' ? "Listening... speak now" : "Ask the AI or tap mic to speak..."}
+                        className="resize-none pr-24 min-h-[52px] py-3 glassmorphism text-base"
                     />
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        className="absolute right-2 top-2 min-touch h-10 w-10 text-muted-foreground hover:text-primary"
-                        onClick={() => handleSendMessage(chatInput)}
-                        aria-label="Send message"
-                    >
-                        <Send className="w-4 h-4" />
-                    </Button>
+                    <div className="absolute right-2 top-2 flex items-center space-x-1">
+                        <Button
+                            size="icon"
+                            type="button"
+                            variant="ghost"
+                            className={`voice-btn min-touch h-10 w-10 ${
+                                voiceState === 'LISTENING' || voiceState === 'TRANSCRIBING'
+                                    ? 'voice-listening-pulse'
+                                    : 'text-muted-foreground hover:text-primary'
+                            }`}
+                            onClick={handleToggleVoice}
+                            aria-label={voiceState === 'LISTENING' ? "Stop recording" : "Voice input"}
+                            title={voiceState === 'LISTENING' ? "Stop recording" : "Voice input (On-Device STT / Snapdragon NPU)"}
+                        >
+                            {voiceState === 'LISTENING' || voiceState === 'TRANSCRIBING' ? (
+                                <MicOff className="w-5 h-5 text-red-500" />
+                            ) : (
+                                <Mic className="w-5 h-5" />
+                            )}
+                        </Button>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="min-touch h-10 w-10 text-muted-foreground hover:text-primary"
+                            onClick={() => handleSendMessage(chatInput)}
+                            aria-label="Send message"
+                        >
+                            <Send className="w-4 h-4" />
+                        </Button>
+                    </div>
                 </div>
-                <div className="ai-quick-actions scroll-x-touch flex gap-2 mt-2 pt-1">
+                <div className="ai-quick-actions scroll-x-touch flex items-center gap-2 mt-2 pt-1">
+                    <button
+                        type="button"
+                        onClick={() => setVoiceLang(l => (l === 'en-US' ? 'hi-IN' : 'en-US'))}
+                        className="text-[11px] font-mono px-2.5 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary font-semibold flex items-center gap-1 min-h-[36px]"
+                        title="Toggle Speech Language"
+                    >
+                        <Languages className="w-3.5 h-3.5" />
+                        <span>{voiceLang === 'en-US' ? 'EN' : 'HI (Hindi)'}</span>
+                    </button>
                     {["Generate Python Code", "Generate cURL", "Explain Endpoint"].map((suggestion) => (
                         <button
                             key={suggestion}
