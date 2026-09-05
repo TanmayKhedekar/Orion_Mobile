@@ -9,6 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/cli": "^6.2.2",
+    "@capacitor/core": "^6.2.2",
+    "@capacitor/keyboard": "^6.0.4",
+    "@capacitor/status-bar": "^6.0.3",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-slot": "^1.2.4",
     "clsx": "^2.1.1",

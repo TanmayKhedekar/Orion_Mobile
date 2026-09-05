@@ -541,6 +541,37 @@
     width: 100%;
     overflow-x: auto;
   }
+
+  /* AI mobile drag handle pill */
+  .ai-drag-handle {
+    width: 2.5rem;
+    height: 4px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 10px auto 4px;
+    flex-shrink: 0;
+    cursor: grab;
+  }
+
+  /* Mobile textarea replacing Monaco editor on touch screens */
+  .mobile-textarea {
+    font-family: var(--font-mono), 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    width: 100%;
+    color: var(--text-primary);
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-heading {
+    font-size: 1.875rem !important;
+    line-height: 2.25rem !important;
+  }
 }
 
 :focus-visible {

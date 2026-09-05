@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,18 @@ const ibmPlexMono = IBM_Plex_Mono({
     weight: ['400', '500', '600', '700'],
     display: 'swap',
 })
+
+export const viewport: Viewport = {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+    viewportFit: 'cover',
+    themeColor: [
+        { media: '(prefers-color-scheme: light)', color: '#F6F1E7' },
+        { media: '(prefers-color-scheme: dark)', color: '#0B1120' },
+    ],
+}
 
 export const metadata: Metadata = {
     title: 'Orion - API Intelligence Layer',

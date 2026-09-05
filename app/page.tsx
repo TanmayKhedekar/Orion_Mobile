@@ -322,6 +322,13 @@ export default function Home() {
     const [mobileExplorerList, setMobileExplorerList] = useState(true);
     const [endpointSearch, setEndpointSearch] = useState("");
     const [methodFilter, setMethodFilter] = useState<string>("ALL");
+    const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            setIsTouchDevice(window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window);
+        }
+    }, []);
 
     const variableStoreRef = React.useRef(variableStore);
     useEffect(() => {
@@ -365,6 +372,66 @@ export default function Home() {
             el.setAttribute('aria-hidden', mobileNavOpen ? 'false' : 'true');
         }
     }, [mobileNavOpen]);
+
+    // Dynamic API base URL resolver (supports web same-origin & mobile remote backend)
+    const getApiUrl = (endpoint: string): string => {
+        if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+            return `${process.env.NEXT_PUBLIC_API_BASE_URL}${endpoint}`;
+        }
+        if (typeof window !== "undefined" && (window.location.protocol === 'capacitor:' || (window.location.hostname === 'localhost' && window.location.port !== '3000'))) {
+            return `https://agentif-ai.vercel.app${endpoint}`;
+        }
+        return endpoint;
+    };
+
+    // Android hardware back button handling via @capacitor/app
+    const sdkModalOpenRef = useRef(sdkModalOpen);
+    const mobileAiOpenRef = useRef(mobileAiOpen);
+    const mobileNavOpenRef = useRef(mobileNavOpen);
+    const selectedEndpointRef = useRef(selectedEndpoint);
+    const modeRef = useRef(mode);
+
+    useEffect(() => {
+        sdkModalOpenRef.current = sdkModalOpen;
+        mobileAiOpenRef.current = mobileAiOpen;
+        mobileNavOpenRef.current = mobileNavOpen;
+        selectedEndpointRef.current = selectedEndpoint;
+        modeRef.current = mode;
+    }, [sdkModalOpen, mobileAiOpen, mobileNavOpen, selectedEndpoint, mode]);
+
+    useEffect(() => {
+        let listenerHandle: any = null;
+        const initCapacitorBack = async () => {
+            try {
+                const { App } = await import('@capacitor/app');
+                listenerHandle = await App.addListener('backButton', ({ canGoBack }) => {
+                    if (sdkModalOpenRef.current) {
+                        setSdkModalOpen(false);
+                    } else if (mobileAiOpenRef.current) {
+                        setMobileAiOpen(false);
+                    } else if (mobileNavOpenRef.current) {
+                        setMobileNavOpen(false);
+                    } else if (selectedEndpointRef.current && window.innerWidth < 1024) {
+                        setSelectedEndpoint(null);
+                    } else if (modeRef.current !== 'explorer') {
+                        setMode('explorer');
+                    } else if (canGoBack) {
+                        window.history.back();
+                    } else {
+                        App.exitApp();
+                    }
+                });
+            } catch {
+                // Not running in Capacitor native runtime, ignore safely
+            }
+        };
+        initCapacitorBack();
+        return () => {
+            if (listenerHandle?.remove) {
+                listenerHandle.remove();
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (spec) {
@@ -432,7 +499,7 @@ export default function Home() {
         setIntentLoading(true);
         setIntentError(null);
         try {
-            const res = await fetch("/api/intent", {
+            const res = await fetch(getApiUrl("/api/intent"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ goal: intentGoal, specs: spec ? [spec] : [], routingMode })
@@ -471,7 +538,7 @@ export default function Home() {
                 { role: "system", content: systemContext }
             ];
 
-            const res = await fetch("/api/chat", {
+            const res = await fetch(getApiUrl("/api/chat"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ messages: reqMessages, routingMode })
@@ -487,9 +554,10 @@ export default function Home() {
                 return;
             }
 
+            const cleanContent = normalizeAssistantMessage(data.content || data.text || '');
             setMessages([...newMessages, {
                 role: "assistant",
-                content: data.content,
+                content: cleanContent,
                 provider: data.provider,
                 model: data.model,
                 routingDecision: data.routingDecision
@@ -617,7 +685,7 @@ export default function Home() {
         if (!testResponse?.data || !selectedEndpoint) return;
         setSuggestLoading(true);
         try {
-            const res = await fetch("/api/suggest-chain", {
+            const res = await fetch(getApiUrl("/api/suggest-chain"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -662,7 +730,7 @@ export default function Home() {
             const specAStr = await fetchRawSpecJSON(diffUrlA);
             const specBStr = await fetchRawSpecJSON(diffUrlB);
 
-            const res = await fetch("/api/diff", {
+            const res = await fetch(getApiUrl("/api/diff"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ specA: specAStr, specB: specBStr, routingMode })
@@ -687,7 +755,7 @@ export default function Home() {
         try {
             const specStr = await fetchRawSpecJSON(auditUrl);
 
-            const res = await fetch("/api/security-audit", {
+            const res = await fetch(getApiUrl("/api/security-audit"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ spec: specStr, routingMode })
@@ -723,7 +791,7 @@ export default function Home() {
             const qString = queryParams.toString();
             const fullUrl = `${spec?.baseUrl}${finalUrl}${qString ? `?${qString}` : ''}`;
 
-            const res = await fetch("/api/diagnose", {
+            const res = await fetch(getApiUrl("/api/diagnose"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -761,7 +829,7 @@ export default function Home() {
         try {
             const specStr = await fetchRawSpecJSON(url);
 
-            const res = await fetch("/api/generate-sdk", {
+            const res = await fetch(getApiUrl("/api/generate-sdk"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ spec: specStr, language: sdkLang, routingMode })
@@ -877,6 +945,7 @@ export default function Home() {
 
     const renderAiChatPanel = (mobile = false) => (
         <>
+            {mobile && <div className="ai-drag-handle" />}
             <div className={`${mobile ? "p-3 ai-header" : "p-3.5"} border-b border-border bg-card/80 backdrop-blur font-medium flex items-center justify-between flex-shrink-0 ai-header gap-2`}>
                 <div className="flex items-center space-x-2">
                     {mobile && (
@@ -1158,13 +1227,21 @@ export default function Home() {
                                             </div>
                                         </div>
                                         <div className="h-96 border border-border rounded-xl overflow-hidden">
-                                            <Editor
-                                                height="100%"
-                                                language={sdkLang}
-                                                theme={theme === "dark" ? "vs-dark" : "light"}
-                                                value={sdkResult.code}
-                                                options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
-                                            />
+                                            {isTouchDevice ? (
+                                                <div className="h-full bg-[#1e1e1e] p-4 overflow-auto">
+                                                    <pre className="text-xs font-mono text-[#d4d4d4] whitespace-pre select-all">
+                                                        {sdkResult.code}
+                                                    </pre>
+                                                </div>
+                                            ) : (
+                                                <Editor
+                                                    height="100%"
+                                                    language={sdkLang}
+                                                    theme={theme === "dark" ? "vs-dark" : "light"}
+                                                    value={sdkResult.code}
+                                                    options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
+                                                />
+                                            )}
                                         </div>
                                     </div>
 
@@ -1867,7 +1944,7 @@ export default function Home() {
                                             />
                                         </div>
                                         <div className="text-left">
-                                            <h1 className="font-display font-black text-5xl md:text-6xl lg:text-7xl text-foreground tracking-tight leading-none">
+                                            <h1 className="hero-heading font-display font-black text-3xl sm:text-5xl md:text-6xl lg:text-7xl text-foreground tracking-tight leading-none">
                                                 Orion
                                             </h1>
                                             <p className="font-mono text-xs uppercase tracking-widest text-accent font-semibold mt-1.5">
@@ -1973,7 +2050,7 @@ export default function Home() {
                                     </div>
 
                                     {/* 3a. Signature Interactive Element: Diner/Waiter/Server Metaphor */}
-                                    <div className="lg:col-span-5 flex justify-center">
+                                    <div className="hidden lg:col-span-5 lg:flex justify-center">
                                         <ApiMetaphorAnimation />
                                     </div>
                                 </div>
@@ -2265,7 +2342,7 @@ export default function Home() {
                         {spec && mode === "explorer" && mobileExplorerList && (
                             <div className="lg:hidden h-full overflow-y-auto p-4 space-y-4 pb-24">
                                 <div className="flex items-center justify-between">
-                                    <h2 className="font-bold text-lg">Explorer</h2>
+                                    <h2 className="font-bold text-lg truncate max-w-[70%]">{spec.title || 'Explorer'}</h2>
                                     <Button variant="outline" size="sm" onClick={() => setSdkModalOpen(true)} className="text-xs">
                                         <Code className="w-3.5 h-3.5 mr-1" /> SDK
                                     </Button>
@@ -2438,16 +2515,27 @@ export default function Home() {
                                             {selectedEndpoint.requestBody && (
                                                 <div className="space-y-3 pt-2 border-t border-border/40">
                                                     <h4 className="text-sm font-semibold">Request Body (JSON)</h4>
-                                                    <div className="h-40 border rounded-md overflow-hidden border-border/50">
-                                                        <Editor
-                                                            height="100%"
-                                                            defaultLanguage="json"
-                                                            theme={theme === "dark" ? "vs-dark" : "light"}
-                                                            value={testParams.body || '{\n  \n}'}
-                                                            onChange={(val) => setTestParams({ ...testParams, body: val || '' })}
-                                                            onMount={handleEditorMount}
-                                                            options={{ minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false }}
-                                                        />
+                                                    <div className="min-h-[160px] border rounded-md overflow-hidden border-border/50">
+                                                        {isTouchDevice ? (
+                                                            <Textarea
+                                                                className="mobile-textarea min-h-[160px] resize-y"
+                                                                placeholder='{\n  \n}'
+                                                                value={testParams.body || ''}
+                                                                onChange={(e) => setTestParams({ ...testParams, body: e.target.value })}
+                                                            />
+                                                        ) : (
+                                                            <div className="h-40">
+                                                                <Editor
+                                                                    height="100%"
+                                                                    defaultLanguage="json"
+                                                                    theme={theme === "dark" ? "vs-dark" : "light"}
+                                                                    value={testParams.body || '{\n  \n}'}
+                                                                    onChange={(val) => setTestParams({ ...testParams, body: val || '' })}
+                                                                    onMount={handleEditorMount}
+                                                                    options={{ minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false }}
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}

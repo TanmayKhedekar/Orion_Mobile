@@ -53,10 +53,10 @@ export default function SignupPage() {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-background p-4 flex-col">
-            <div className="mb-8 flex flex-col items-center">
-                <Image src="/logo.png" alt="Orion" width={112} height={112} className="h-28 w-auto object-contain mb-4 dark:invert-0 invert" priority />
-                <h1 className="text-2xl font-bold tracking-tight">API Intelligence Layer</h1>
+        <div className="flex min-h-screen items-center justify-center bg-background p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] flex-col">
+            <div className="mb-6 sm:mb-8 flex flex-col items-center">
+                <Image src="/logo.png" alt="Orion" width={112} height={112} className="h-16 sm:h-24 w-auto object-contain mb-3 sm:mb-4 dark:invert-0 invert" priority />
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-center">API Intelligence Layer</h1>
             </div>
 
             <Card className="w-full max-w-md border-border glassmorphism shadow-2xl">

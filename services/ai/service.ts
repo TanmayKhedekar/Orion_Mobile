@@ -57,14 +57,30 @@ export class AIService {
         // 2. Fetch the target provider
         const provider = this.getProvider(decision.provider);
 
+        // Safe Diagnostic Logging (Never logs secrets, keys, or user credentials)
+        console.log(
+            `[AI DEBUG] Task: ${request.taskType} | Mode: ${request.routingMode || 'auto'} | Provider: ${decision.provider.toUpperCase()} | Model: ${decision.model || 'default'} | Request started`
+        );
+
         try {
             // 3. Generate completion
             const response = await provider.generate(request);
 
             // 4. Attach routing decision telemetry
             response.routingDecision = decision;
+
+            const contentLen = (response.content || response.text || '').length;
+            console.log(
+                `[AI DEBUG] HTTP Status: 200 | Response received | Provider: ${response.provider.toUpperCase()} | Model: ${response.model} | Latency: ${response.latency}ms | Content length: ${contentLen}`
+            );
+
             return response;
         } catch (error: any) {
+            const errStatus = error?.status || error?.statusCode || 500;
+            console.log(
+                `[AI DEBUG] HTTP Status: ${errStatus} | Error: ${error?.message || 'Unknown AI error'}`
+            );
+
             // Graceful fallback to Groq if allowed and primary target is not already Groq
             const groqProvider = this.providers.get('groq');
             if (
