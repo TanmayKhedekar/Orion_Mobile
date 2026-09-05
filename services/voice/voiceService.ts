@@ -58,7 +58,7 @@ export class VoiceService {
     }
 
     public async startListening(options?: VoiceListenOptions): Promise<void> {
-        if (this.state === 'LISTENING') return;
+        if (this.state === 'LISTENING' || this.state === 'TRANSCRIBING') return;
 
         this.startTime = Date.now();
         this.activeProvider = await this.getBestProvider();
@@ -76,15 +76,38 @@ export class VoiceService {
                     options?.onStateChange?.(s);
                 },
                 onPartial: (partial) => {
-                    if (this.state !== 'TRANSCRIBING') {
+                    if (this.state !== 'TRANSCRIBING' && this.state !== 'READY') {
                         this.setState('TRANSCRIBING');
                     }
                     options?.onPartial?.(partial);
+                },
+                onResult: (finalText) => {
+                    this.setState('READY');
+                    options?.onResult?.(finalText);
+                    setTimeout(() => {
+                        if (this.state === 'READY') {
+                            this.setState('IDLE');
+                        }
+                    }, 600);
+                },
+                onError: (err) => {
+                    this.setState('ERROR');
+                    options?.onError?.(err);
+                    setTimeout(() => {
+                        if (this.state === 'ERROR') {
+                            this.setState('IDLE');
+                        }
+                    }, 1200);
                 }
             });
         } catch (error: any) {
             this.setState('ERROR');
             console.error(`[VOICE DEBUG] Recording failed: ${error?.message || 'Unknown error'}`);
+            setTimeout(() => {
+                if (this.state === 'ERROR') {
+                    this.setState('IDLE');
+                }
+            }, 1200);
             throw error;
         }
     }

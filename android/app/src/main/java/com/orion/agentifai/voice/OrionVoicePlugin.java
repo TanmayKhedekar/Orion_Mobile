@@ -7,6 +7,8 @@ import android.os.Bundle;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -26,6 +28,8 @@ import java.util.Locale;
 public class OrionVoicePlugin extends Plugin {
 
     private SpeechRecognizer speechRecognizer;
+    private TextToSpeech textToSpeech;
+    private boolean isTtsInitialized = false;
     private String currentTranscript = "";
     private boolean isListening = false;
     private PluginCall activeStartCall;
@@ -52,6 +56,7 @@ public class OrionVoicePlugin extends Plugin {
         ret.put("model", onDeviceAvailable ? "Whisper-compatible On-Device ASR" : "System ASR Engine");
         ret.put("onDevice", onDeviceAvailable);
         ret.put("npuAccelerated", isSnapdragon && onDeviceAvailable);
+        ret.put("ttsAvailable", true);
         call.resolve(ret);
     }
 
@@ -85,10 +90,18 @@ public class OrionVoicePlugin extends Plugin {
             try {
                 destroyRecognizer();
 
-                // Attempt to create on-device recognizer on Android 12+ (API 31+) if supported
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(getContext())) {
-                    speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(getContext());
-                } else {
+                // Safely attempt on-device recognizer first, falling back to standard speech recognizer
+                boolean created = false;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    try {
+                        if (SpeechRecognizer.isOnDeviceRecognitionAvailable(getContext())) {
+                            speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(getContext());
+                            created = true;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                if (!created || speechRecognizer == null) {
                     speechRecognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
                 }
 
@@ -132,6 +145,12 @@ public class OrionVoicePlugin extends Plugin {
                         JSObject err = new JSObject();
                         err.put("error", errorMsg);
                         err.put("errorCode", error);
+                        // If we already have partial transcript, emit it as fallback result before error
+                        if (currentTranscript != null && !currentTranscript.trim().isEmpty()) {
+                            JSObject ret = new JSObject();
+                            ret.put("text", currentTranscript.trim());
+                            notifyListeners("voiceCompleted", ret);
+                        }
                         notifyListeners("voiceError", err);
                     }
 
@@ -140,10 +159,10 @@ public class OrionVoicePlugin extends Plugin {
                         isListening = false;
                         ArrayList<String> matches = results != null ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
                         String text = (matches != null && !matches.isEmpty()) ? matches.get(0) : currentTranscript;
-                        currentTranscript = text;
+                        currentTranscript = text != null ? text.trim() : "";
 
                         JSObject ret = new JSObject();
-                        ret.put("text", text);
+                        ret.put("text", currentTranscript);
                         notifyListeners("voiceCompleted", ret);
                     }
 
@@ -184,7 +203,7 @@ public class OrionVoicePlugin extends Plugin {
                     speechRecognizer.stopListening();
                 }
                 JSObject ret = new JSObject();
-                ret.put("transcript", currentTranscript);
+                ret.put("transcript", currentTranscript != null ? currentTranscript.trim() : "");
                 call.resolve(ret);
             } catch (Exception e) {
                 call.reject("Error stopping voice recognition: " + e.getMessage());
@@ -198,6 +217,108 @@ public class OrionVoicePlugin extends Plugin {
             destroyRecognizer();
             call.resolve();
         });
+    }
+
+    // ==========================================
+    // TEXT-TO-SPEECH (VOICE OUTPUT) METHODS
+    // ==========================================
+
+    private void initTtsIfNeeded(Runnable onReady) {
+        if (textToSpeech != null && isTtsInitialized) {
+            if (onReady != null) onReady.run();
+            return;
+        }
+
+        getActivity().runOnUiThread(() -> {
+            textToSpeech = new TextToSpeech(getContext(), status -> {
+                if (status == TextToSpeech.SUCCESS) {
+                    isTtsInitialized = true;
+                    textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                        @Override
+                        public void onStart(String utteranceId) {
+                            JSObject data = new JSObject();
+                            data.put("utteranceId", utteranceId);
+                            notifyListeners("ttsStarted", data);
+                        }
+
+                        @Override
+                        public void onDone(String utteranceId) {
+                            JSObject data = new JSObject();
+                            data.put("utteranceId", utteranceId);
+                            notifyListeners("ttsDone", data);
+                        }
+
+                        @Override
+                        public void onError(String utteranceId) {
+                            JSObject data = new JSObject();
+                            data.put("utteranceId", utteranceId);
+                            notifyListeners("ttsError", data);
+                        }
+                    });
+                    if (onReady != null) onReady.run();
+                } else {
+                    isTtsInitialized = false;
+                }
+            });
+        });
+    }
+
+    @PluginMethod
+    public void speak(PluginCall call) {
+        String text = call.getString("text", "");
+        String language = call.getString("language", "en-US");
+        float rate = call.getFloat("rate", 1.0f);
+        float pitch = call.getFloat("pitch", 1.0f);
+
+        if (text == null || text.trim().isEmpty()) {
+            call.reject("Text cannot be empty");
+            return;
+        }
+
+        initTtsIfNeeded(() -> {
+            getActivity().runOnUiThread(() -> {
+                try {
+                    Locale locale = (language != null && language.startsWith("hi")) ? new Locale("hi", "IN") : Locale.US;
+                    textToSpeech.setLanguage(locale);
+                    textToSpeech.setSpeechRate(rate);
+                    textToSpeech.setPitch(pitch);
+
+                    String utteranceId = "orion_tts_" + System.currentTimeMillis();
+                    textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
+
+                    JSObject ret = new JSObject();
+                    ret.put("status", "speaking");
+                    ret.put("utteranceId", utteranceId);
+                    call.resolve(ret);
+                } catch (Exception e) {
+                    call.reject("TTS speech error: " + e.getMessage());
+                }
+            });
+        });
+    }
+
+    @PluginMethod
+    public void stopSpeaking(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            try {
+                if (textToSpeech != null) {
+                    textToSpeech.stop();
+                }
+                JSObject ret = new JSObject();
+                ret.put("status", "stopped");
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("Error stopping TTS: " + e.getMessage());
+            }
+        });
+    }
+
+    @PluginMethod
+    public void isSpeaking(PluginCall call) {
+        boolean speaking = textToSpeech != null && textToSpeech.isSpeaking();
+        JSObject ret = new JSObject();
+        ret.put("speaking", speaking);
+        call.resolve(ret);
     }
 
     private void destroyRecognizer() {
@@ -239,6 +360,14 @@ public class OrionVoicePlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         destroyRecognizer();
+        if (textToSpeech != null) {
+            try {
+                textToSpeech.stop();
+                textToSpeech.shutdown();
+            } catch (Exception ignored) {}
+            textToSpeech = null;
+            isTtsInitialized = false;
+        }
         super.handleOnDestroy();
     }
 }

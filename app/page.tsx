@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Link, Send, Code, Play, AlertCircle, ChevronRight, Check, Search, Shield, Copy, Sun, Moon, X, Download, Link2, Sparkles, Plus, Trash2, Save, PlusCircle, MinusCircle, RefreshCw, Terminal, AlertTriangle, Menu, Home as HomeIcon, User, ArrowLeft, Settings, Mic, MicOff, Radio, Languages } from "lucide-react";
+import { Bot, Link, Send, Code, Play, AlertCircle, ChevronRight, Check, Search, Shield, Copy, Sun, Moon, X, Download, Link2, Sparkles, Plus, Trash2, Save, PlusCircle, MinusCircle, RefreshCw, Terminal, AlertTriangle, Menu, Home as HomeIcon, User, ArrowLeft, Settings, Mic, MicOff, Radio, Languages, Volume2, VolumeX } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { useAuth } from "@/context/AuthContext";
 import { LogOut } from "lucide-react";
@@ -19,7 +19,8 @@ import { VariableInput } from "@/components/VariableInput";
 import { VariableStorePanel } from "@/components/VariableStorePanel";
 import { ApiMetaphorAnimation } from "@/components/ApiMetaphorAnimation";
 import { voiceService } from "@/services/voice/voiceService";
-import { VoiceState } from "@/services/voice/types";
+import { ttsService } from "@/services/voice/ttsService";
+import { VoiceState, TTSState } from "@/services/voice/types";
 
 function normalizeAssistantMessage(raw: any): string {
     if (!raw) return '';
@@ -326,18 +327,27 @@ export default function Home() {
     const [methodFilter, setMethodFilter] = useState<string>("ALL");
     const [isTouchDevice, setIsTouchDevice] = useState(false);
 
-    // Voice AI Speech-to-Text State
+    // Voice AI Speech-to-Text & Text-to-Speech State
     const [voiceState, setVoiceState] = useState<VoiceState>('IDLE');
     const [voiceLang, setVoiceLang] = useState<string>('en-US');
     const [partialTranscript, setPartialTranscript] = useState<string>('');
+    const [ttsState, setTtsState] = useState<TTSState>('IDLE');
+    const [activeSpeakingId, setActiveSpeakingId] = useState<string | null>(null);
+    const [autoSpeak, setAutoSpeak] = useState<boolean>(false);
 
     useEffect(() => {
-        const unsubscribe = voiceService.onStateChange((s) => {
+        const unsubscribeVoice = voiceService.onStateChange((s) => {
             setVoiceState(s);
         });
+        const unsubscribeTts = ttsService.onStateChange((s, id) => {
+            setTtsState(s);
+            setActiveSpeakingId(id || null);
+        });
         return () => {
-            unsubscribe();
+            unsubscribeVoice();
+            unsubscribeTts();
             voiceService.cancel();
+            ttsService.stop();
         };
     }, []);
 
@@ -346,7 +356,7 @@ export default function Home() {
             try {
                 const finalTranscript = await voiceService.stopListening();
                 if (finalTranscript) {
-                    setChatInput(prev => (prev ? `${prev} ${finalTranscript}` : finalTranscript));
+                    setChatInput(prev => (prev ? `${prev.trim()} ${finalTranscript}`.trim() : finalTranscript));
                     setPartialTranscript('');
                 }
             } catch (e) {
@@ -354,16 +364,40 @@ export default function Home() {
             }
         } else {
             try {
+                if (ttsState === 'SPEAKING') {
+                    await ttsService.stop();
+                }
                 setPartialTranscript('');
                 await voiceService.startListening({
                     language: voiceLang,
                     onPartial: (partial) => {
                         setPartialTranscript(partial);
+                    },
+                    onResult: (finalText) => {
+                        if (finalText) {
+                            setChatInput(prev => (prev ? `${prev.trim()} ${finalText}`.trim() : finalText));
+                            setPartialTranscript('');
+                        }
+                    },
+                    onError: (err) => {
+                        console.warn('Voice recognition error:', err);
                     }
                 });
             } catch (e: any) {
                 console.error('Failed to start listening:', e);
             }
+        }
+    };
+
+    const handleToggleSpeak = async (rawContent: string, utteranceId: string) => {
+        if (activeSpeakingId === utteranceId && ttsState === 'SPEAKING') {
+            await ttsService.stop();
+        } else {
+            await ttsService.speak(rawContent, utteranceId, {
+                language: voiceLang,
+                rate: 1.0,
+                pitch: 1.0
+            });
         }
     };
 
@@ -598,6 +632,7 @@ export default function Home() {
             }
 
             const cleanContent = normalizeAssistantMessage(data.content || data.text || '');
+            const msgId = `msg_${Date.now()}`;
             setMessages([...newMessages, {
                 role: "assistant",
                 content: cleanContent,
@@ -605,6 +640,10 @@ export default function Home() {
                 model: data.model,
                 routingDecision: data.routingDecision
             }]);
+
+            if (autoSpeak && cleanContent) {
+                ttsService.speak(cleanContent, msgId, { language: voiceLang });
+            }
         } catch (err: any) {
             setMessages([...newMessages, { role: "assistant", content: `Error: ${err.message}` }]);
         } finally {
@@ -999,7 +1038,26 @@ export default function Home() {
                     <Bot className="w-5 h-5 text-primary flex-shrink-0" />
                     <span className="text-sm font-bold">AI Assistant</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5">
+                    {/* Auto Speak Toggle */}
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setAutoSpeak(prev => !prev);
+                            if (ttsState === 'SPEAKING') {
+                                ttsService.stop();
+                            }
+                        }}
+                        className={`p-1.5 px-2 rounded-lg border text-xs flex items-center gap-1 transition-all ${
+                            autoSpeak
+                                ? 'bg-primary/20 border-primary/40 text-primary font-semibold'
+                                : 'bg-transparent border-white/5 text-muted-foreground hover:text-foreground hover:bg-white/5'
+                        }`}
+                        title={autoSpeak ? "Auto-Speak Responses: ON (AI reads responses aloud)" : "Auto-Speak Responses: OFF"}
+                    >
+                        {autoSpeak ? <Volume2 className="w-3.5 h-3.5 text-primary" /> : <VolumeX className="w-3.5 h-3.5" />}
+                        <span className="text-[11px] hidden sm:inline">{autoSpeak ? "Audio ON" : "Audio OFF"}</span>
+                    </button>
                     {renderRoutingModeSelector(true)}
                     {mobile && (
                         <Button variant="ghost" size="icon" className="min-touch h-10 w-10" onClick={() => setMobileAiOpen(false)} aria-label="Close AI Assistant">
@@ -1021,16 +1079,45 @@ export default function Home() {
                             <div className={`px-0 py-0 break-anywhere ${m.role === 'user' ? 'text-[13px] whitespace-pre-wrap' : ''}`}>
                                 {m.role === 'user' ? m.content : <MessageContent content={m.content} theme={theme} />}
                             </div>
-                            {m.role === 'assistant' && m.routingDecision && (
-                                <div className="mt-2.5 pt-1.5 border-t border-white/10 flex items-center flex-wrap gap-1.5 text-[10px] text-muted-foreground font-mono" title={m.routingDecision.reason}>
-                                    <span className="px-1.5 py-0.5 rounded bg-primary/20 text-primary font-bold border border-primary/30">
-                                        {m.routingDecision.mode === 'auto' ? '⚡ AUTO' : m.routingDecision.mode === 'cloud' ? '☁️ CLOUD' : '🧠 LOCAL'}
-                                    </span>
-                                    <span>→</span>
-                                    <span className="text-foreground/90 font-semibold">{m.routingDecision.provider.toUpperCase()}</span>
-                                    {m.routingDecision.fallbackApplied && (
-                                        <span className="text-amber-400 text-[9px] font-sans">(fallback)</span>
-                                    )}
+                            {m.role === 'assistant' && (
+                                <div className="mt-2.5 pt-1.5 border-t border-white/10 flex items-center justify-between flex-wrap gap-1.5 text-[10px] text-muted-foreground font-mono">
+                                    <div className="flex items-center gap-1.5" title={m.routingDecision?.reason}>
+                                        {m.routingDecision && (
+                                            <>
+                                                <span className="px-1.5 py-0.5 rounded bg-primary/20 text-primary font-bold border border-primary/30">
+                                                    {m.routingDecision.mode === 'auto' ? '⚡ AUTO' : m.routingDecision.mode === 'cloud' ? '☁️ CLOUD' : '🧠 LOCAL'}
+                                                </span>
+                                                <span>→</span>
+                                                <span className="text-foreground/90 font-semibold">{m.routingDecision.provider.toUpperCase()}</span>
+                                                {m.routingDecision.fallbackApplied && (
+                                                    <span className="text-amber-400 text-[9px] font-sans">(fallback)</span>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                    {/* Text-to-Speech Output (Read Aloud Button) */}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleToggleSpeak(m.content, `msg_${idx}`)}
+                                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] transition-all font-sans ${
+                                            activeSpeakingId === `msg_${idx}` && ttsState === 'SPEAKING'
+                                                ? 'bg-primary text-primary-foreground font-semibold shadow-sm animate-pulse'
+                                                : 'hover:bg-white/10 text-muted-foreground hover:text-foreground border border-white/5'
+                                        }`}
+                                        title={activeSpeakingId === `msg_${idx}` && ttsState === 'SPEAKING' ? "Stop reading" : "Read message aloud (Text-to-Speech)"}
+                                    >
+                                        {activeSpeakingId === `msg_${idx}` && ttsState === 'SPEAKING' ? (
+                                            <>
+                                                <VolumeX className="w-3.5 h-3.5 text-red-300" />
+                                                <span className="font-semibold">Stop</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Volume2 className="w-3.5 h-3.5" />
+                                                <span>Read</span>
+                                            </>
+                                        )}
+                                    </button>
                                 </div>
                             )}
                         </div>

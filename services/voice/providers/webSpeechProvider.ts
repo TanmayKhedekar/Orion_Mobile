@@ -1,8 +1,8 @@
-import { SpeechToTextProvider, VoiceCapabilities, VoiceListenOptions } from '../types';
+import { SpeechToTextProvider, TextToSpeechProvider, VoiceCapabilities, VoiceListenOptions, TTSOptions } from '../types';
 
-export class WebSpeechProvider implements SpeechToTextProvider {
+export class WebSpeechProvider implements SpeechToTextProvider, TextToSpeechProvider {
     public readonly id = 'webspeech';
-    public readonly name = 'Browser Web Speech API';
+    public readonly name = 'Browser Web Speech & Synthesis API';
 
     private recognition: any = null;
     private isRunning = false;
@@ -34,7 +34,7 @@ export class WebSpeechProvider implements SpeechToTextProvider {
     public async startListening(options?: VoiceListenOptions): Promise<void> {
         const SpeechClass = this.getSpeechRecognitionClass();
         if (!SpeechClass) {
-            throw new Error('Web Speech API is not supported in this browser.');
+            throw new Error('Web Speech API is not supported in this browser. Please use Chrome, Edge, or Android Orion APK.');
         }
 
         if (this.isRunning) {
@@ -45,6 +45,7 @@ export class WebSpeechProvider implements SpeechToTextProvider {
         this.recognition = new SpeechClass();
         this.recognition.continuous = true;
         this.recognition.interimResults = true;
+        this.recognition.maxAlternatives = 1;
         this.recognition.lang = options?.language || 'en-US';
 
         this.recognition.onstart = () => {
@@ -56,16 +57,18 @@ export class WebSpeechProvider implements SpeechToTextProvider {
             let interimText = '';
             let finalText = '';
 
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                const transcript = event.results[i][0].transcript;
-                if (event.results[i].isFinal) {
-                    finalText += transcript;
-                } else {
-                    interimText += transcript;
+            for (let i = 0; i < event.results.length; ++i) {
+                const item = event.results[i];
+                if (item && item[0]) {
+                    if (item.isFinal) {
+                        finalText += item[0].transcript + ' ';
+                    } else {
+                        interimText += item[0].transcript;
+                    }
                 }
             }
 
-            const activeText = (finalText + ' ' + interimText).trim() || this.currentTranscript;
+            const activeText = (finalText + interimText).trim();
             if (activeText) {
                 this.currentTranscript = activeText;
                 options?.onPartial?.(activeText);
@@ -73,10 +76,22 @@ export class WebSpeechProvider implements SpeechToTextProvider {
         };
 
         this.recognition.onerror = (event: any) => {
+            console.warn('[VOICE DEBUG] Web Speech recognition notice:', event?.error);
+            // Handle silence or no-speech gracefully
+            if (event?.error === 'no-speech' || event?.error === 'aborted') {
+                const text = this.currentTranscript.trim();
+                if (text) {
+                    options?.onResult?.(text);
+                }
+                options?.onStateChange?.('READY');
+                return;
+            }
+
             this.isRunning = false;
             options?.onStateChange?.('ERROR');
+            options?.onError?.(event?.error || 'Speech recognition error');
             if (this.onErrorRejecter) {
-                this.onErrorRejecter(new Error(event.error || 'Speech recognition error'));
+                this.onErrorRejecter(new Error(event?.error || 'Speech recognition error'));
                 this.onErrorRejecter = null;
             }
         };
@@ -84,8 +99,12 @@ export class WebSpeechProvider implements SpeechToTextProvider {
         this.recognition.onend = () => {
             this.isRunning = false;
             options?.onStateChange?.('READY');
+            const final = this.currentTranscript.trim();
+            if (final) {
+                options?.onResult?.(final);
+            }
             if (this.onCompletedResolver) {
-                this.onCompletedResolver(this.currentTranscript.trim());
+                this.onCompletedResolver(final);
                 this.onCompletedResolver = null;
             }
         };
@@ -100,8 +119,9 @@ export class WebSpeechProvider implements SpeechToTextProvider {
 
     public async stopListening(): Promise<string> {
         return new Promise((resolve) => {
+            const final = this.currentTranscript.trim();
             if (!this.isRunning || !this.recognition) {
-                resolve(this.currentTranscript.trim());
+                resolve(final);
                 return;
             }
 
@@ -109,7 +129,7 @@ export class WebSpeechProvider implements SpeechToTextProvider {
             try {
                 this.recognition.stop();
             } catch {
-                resolve(this.currentTranscript.trim());
+                resolve(final);
             }
         });
     }
@@ -122,6 +142,63 @@ export class WebSpeechProvider implements SpeechToTextProvider {
             this.recognition = null;
         }
         this.isRunning = false;
+    }
+
+    // ==========================================
+    // TEXT-TO-SPEECH (SPEECH SYNTHESIS)
+    // ==========================================
+
+    public async speak(text: string, options?: TTSOptions): Promise<void> {
+        if (typeof window === 'undefined' || !window.speechSynthesis) {
+            throw new Error('SpeechSynthesis is not supported in this environment.');
+        }
+
+        // Cancel ongoing utterance
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = options?.language || 'en-US';
+        utterance.rate = options?.rate || 1.0;
+        utterance.pitch = options?.pitch || 1.0;
+
+        // Try to pick a natural voice if available
+        const voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+            const langPrefix = (options?.language || 'en').split('-')[0];
+            const matchingVoice = voices.find(v => v.lang.startsWith(langPrefix) && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Premium')))
+                || voices.find(v => v.lang.startsWith(langPrefix));
+            if (matchingVoice) {
+                utterance.voice = matchingVoice;
+            }
+        }
+
+        utterance.onstart = () => {
+            options?.onStart?.();
+        };
+
+        utterance.onend = () => {
+            options?.onEnd?.();
+        };
+
+        utterance.onerror = (e) => {
+            console.error('[TTS DEBUG] Web Speech synthesis error:', e);
+            options?.onError?.(e);
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    public async stop(): Promise<void> {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+    }
+
+    public async isSpeaking(): Promise<boolean> {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+            return window.speechSynthesis.speaking;
+        }
+        return false;
     }
 }
 
