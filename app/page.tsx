@@ -355,10 +355,17 @@ export default function Home() {
         if (voiceState === 'LISTENING' || voiceState === 'TRANSCRIBING') {
             try {
                 const finalTranscript = await voiceService.stopListening();
-                if (finalTranscript) {
-                    setChatInput(prev => (prev ? `${prev.trim()} ${finalTranscript}`.trim() : finalTranscript));
-                    setPartialTranscript('');
+                if (finalTranscript && finalTranscript.trim()) {
+                    const cleanText = finalTranscript.trim();
+                    setChatInput(prev => {
+                        const current = (prev || '').trim();
+                        if (current.endsWith(cleanText)) {
+                            return current;
+                        }
+                        return current ? `${current} ${cleanText}` : cleanText;
+                    });
                 }
+                setPartialTranscript('');
             } catch (e) {
                 console.error('Failed to stop listening:', e);
             }
@@ -374,8 +381,15 @@ export default function Home() {
                         setPartialTranscript(partial);
                     },
                     onResult: (finalText) => {
-                        if (finalText) {
-                            setChatInput(prev => (prev ? `${prev.trim()} ${finalText}`.trim() : finalText));
+                        if (finalText && finalText.trim()) {
+                            const cleanText = finalText.trim();
+                            setChatInput(prev => {
+                                const current = (prev || '').trim();
+                                if (current.endsWith(cleanText)) {
+                                    return current;
+                                }
+                                return current ? `${current} ${cleanText}` : cleanText;
+                            });
                             setPartialTranscript('');
                         }
                     },
@@ -1000,26 +1014,28 @@ export default function Home() {
         </div>
     );
 
-    const renderRoutingModeSelector = (compact = false) => (
-        <div className="inline-flex items-center rounded-xl p-1 bg-card/60 border border-border/80 shadow-xs" role="group" aria-label="AI Routing Mode">
+    const renderRoutingModeSelector = (size: "sm" | "md" = "sm") => (
+        <div className="inline-flex items-center rounded-lg p-0.5 bg-black/25 dark:bg-white/5 border border-white/10 shadow-xs" role="group" aria-label="AI Routing Mode">
             {[
                 { id: "auto", label: "Auto", icon: "⚡", title: "Auto Mode: Deterministic Hybrid Task Routing" },
                 { id: "cloud", label: "Cloud", icon: "☁️", title: "Cloud Mode: Organizer Cloud AI / Groq" },
-                { id: "local", label: "Local", icon: "🧠", title: "Local Mode: Qualcomm Snapdragon On-Device NPU (Stub)" },
+                { id: "local", label: "Local", icon: "🧠", title: "Local Mode: Qualcomm Snapdragon On-Device NPU" },
             ].map((m) => (
                 <button
                     key={m.id}
                     type="button"
                     onClick={() => setRoutingMode(m.id as any)}
                     title={m.title}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                    className={`rounded-md font-medium transition-all flex items-center gap-1 ${
+                        size === "sm" ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"
+                    } ${
                         routingMode === m.id
                             ? "bg-primary text-primary-foreground font-bold shadow-xs scale-100"
-                            : "text-muted-foreground hover:text-foreground hover:bg-white/5 scale-[0.98]"
+                            : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                     }`}
                 >
-                    <span>{m.icon}</span>
-                    <span className={compact ? "hidden sm:inline" : "inline"}>{m.label}</span>
+                    <span className="text-[11px]">{m.icon}</span>
+                    <span className="font-semibold">{m.label}</span>
                 </button>
             ))}
         </div>
@@ -1067,23 +1083,21 @@ export default function Home() {
                     </div>
                 </div>
 
-                {/* Sub-Header: Routing Mode & Speech Language Selector */}
-                <div className="px-3 pb-2.5 pt-1.5 flex items-center justify-between gap-2 flex-wrap border-t border-white/5 bg-card/40">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <span className="font-semibold text-foreground/80 text-[11px]">Mode:</span>
-                        {renderRoutingModeSelector(true)}
+                {/* Sub-Header: Routing Mode & Speech Language Selector in a clean single row */}
+                <div className="px-3 py-1.5 flex items-center justify-between gap-1.5 border-t border-white/5 bg-card/40">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[11px] font-semibold text-muted-foreground flex-shrink-0">Mode:</span>
+                        {renderRoutingModeSelector("sm")}
                     </div>
-                    <div className="flex items-center gap-1.5">
-                        <button
-                            type="button"
-                            onClick={() => setVoiceLang(l => (l === 'en-US' ? 'hi-IN' : 'en-US'))}
-                            className="text-[11px] font-mono px-2 py-1 rounded-md border border-primary/30 bg-primary/10 text-primary font-semibold flex items-center gap-1 min-h-[30px]"
-                            title="Toggle Speech Language"
-                        >
-                            <Languages className="w-3.5 h-3.5" />
-                            <span>{voiceLang === 'en-US' ? 'EN (English)' : 'HI (Hindi)'}</span>
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setVoiceLang(l => (l === 'en-US' ? 'hi-IN' : 'en-US'))}
+                        className="text-[11px] font-mono px-2 py-1 rounded-md border border-primary/30 bg-primary/10 text-primary font-semibold flex items-center gap-1 min-h-[26px] flex-shrink-0"
+                        title="Toggle Speech Language (English / Hindi)"
+                    >
+                        <Languages className="w-3.5 h-3.5" />
+                        <span>{voiceLang === 'en-US' ? 'EN' : 'HI'}</span>
+                    </button>
                 </div>
             </div>
             <div className="ai-mobile-content flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 min-h-0">

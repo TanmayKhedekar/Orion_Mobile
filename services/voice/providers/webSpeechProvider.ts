@@ -6,6 +6,7 @@ export class WebSpeechProvider implements SpeechToTextProvider, TextToSpeechProv
 
     private recognition: any = null;
     private isRunning = false;
+    private isFinalized = false;
     private currentTranscript = '';
     private currentUtterance: SpeechSynthesisUtterance | null = null;
     private onCompletedResolver: ((text: string) => void) | null = null;
@@ -43,6 +44,7 @@ export class WebSpeechProvider implements SpeechToTextProvider, TextToSpeechProv
         }
 
         this.currentTranscript = '';
+        this.isFinalized = false;
         this.recognition = new SpeechClass();
         this.recognition.continuous = true;
         this.recognition.interimResults = true;
@@ -81,7 +83,8 @@ export class WebSpeechProvider implements SpeechToTextProvider, TextToSpeechProv
             // Handle silence or no-speech gracefully
             if (event?.error === 'no-speech' || event?.error === 'aborted') {
                 const text = this.currentTranscript.trim();
-                if (text) {
+                if (text && !this.isFinalized) {
+                    this.isFinalized = true;
                     options?.onResult?.(text);
                 }
                 options?.onStateChange?.('READY');
@@ -101,7 +104,8 @@ export class WebSpeechProvider implements SpeechToTextProvider, TextToSpeechProv
             this.isRunning = false;
             options?.onStateChange?.('READY');
             const final = this.currentTranscript.trim();
-            if (final) {
+            if (final && !this.isFinalized) {
+                this.isFinalized = true;
                 options?.onResult?.(final);
             }
             if (this.onCompletedResolver) {
