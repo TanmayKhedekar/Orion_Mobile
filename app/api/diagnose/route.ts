@@ -1,20 +1,7 @@
 import { NextResponse } from 'next/server';
 import { aiService, TaskType } from '@/services/ai';
 import { aggressiveTrimSpec } from '@/lib/specTrimmer';
-
-function safeParseJSON(raw: string) {
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    if (start === -1 || end === -1) throw new Error('No JSON found');
-    let jsonStr = raw.slice(start, end + 1);
-    jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, (ch) => {
-        if (ch === '\n') return '\\n';
-        if (ch === '\r') return '\\r';
-        if (ch === '\t') return '\\t';
-        return '';
-    });
-    return JSON.parse(jsonStr);
-}
+import { safeExtractJSON } from '@/lib/safeJson';
 
 export async function POST(req: Request) {
     try {
@@ -69,14 +56,15 @@ Response Body: ${responseBody}${trimmedSpec ? `\nOpenAPI Spec Context: ${JSON.st
         });
 
         const textContent = completion.text || completion.content || '';
+        const fallbackDiagnosis: { diagnosis: string; rootCause: string; fix: string; severity: string; fixedCode: string; routingDecision?: any } = {
+            diagnosis: 'API returned an error response.',
+            rootCause: `HTTP ${status} received from endpoint ${requestUrl || ''}.`,
+            fix: 'Review request parameters, headers, and authentication token.',
+            severity: status >= 500 ? 'critical' : 'warning',
+            fixedCode: ''
+        };
 
-        let jsonResult: any;
-        try {
-            jsonResult = JSON.parse(textContent);
-        } catch (e) {
-            jsonResult = safeParseJSON(textContent);
-        }
-
+        const jsonResult = safeExtractJSON(textContent, fallbackDiagnosis);
         jsonResult.routingDecision = completion.routingDecision;
 
         return NextResponse.json(jsonResult);

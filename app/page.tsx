@@ -19,12 +19,82 @@ import { VariableInput } from "@/components/VariableInput";
 import { VariableStorePanel } from "@/components/VariableStorePanel";
 import { ApiMetaphorAnimation } from "@/components/ApiMetaphorAnimation";
 
-const MessageContent = ({ content, theme }: { content: string, theme: "dark" | "light" }) => {
+function normalizeAssistantMessage(raw: any): string {
+    if (!raw) return '';
+    if (typeof raw === 'object') {
+        if (typeof raw.content === 'string') return normalizeAssistantMessage(raw.content);
+        if (typeof raw.response === 'string') return normalizeAssistantMessage(raw.response);
+        if (typeof raw.message === 'string') return normalizeAssistantMessage(raw.message);
+        if (typeof raw.text === 'string') return normalizeAssistantMessage(raw.text);
+        return JSON.stringify(raw, null, 2);
+    }
+    if (typeof raw !== 'string') return String(raw);
+
+    let text = raw.trim();
+
+    // Check if string is wrapped in `response:\n{...}` or similar prefixes
+    if (/^response:\s*\{/i.test(text)) {
+        const braceIdx = text.indexOf('{');
+        if (braceIdx !== -1) {
+            try {
+                const parsed = JSON.parse(text.slice(braceIdx));
+                return normalizeAssistantMessage(parsed);
+            } catch { }
+        }
+    }
+
+    // Check if string is a JSON object with content/response/message field
+    if (text.startsWith('{') && text.endsWith('}')) {
+        try {
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed === 'object') {
+                if (typeof parsed.content === 'string') return normalizeAssistantMessage(parsed.content);
+                if (typeof parsed.response === 'string') return normalizeAssistantMessage(parsed.response);
+                if (typeof parsed.message === 'string') return normalizeAssistantMessage(parsed.message);
+                if (typeof parsed.text === 'string') return normalizeAssistantMessage(parsed.text);
+            }
+        } catch { }
+    }
+
+    return text;
+}
+
+function renderInlineMarkdown(text: string, theme: "dark" | "light") {
+    // Parse bold (**text**) and inline code (`code`)
+    const chunks = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+    return chunks.map((chunk, i) => {
+        if (chunk.startsWith('`') && chunk.endsWith('`') && chunk.length > 2) {
+            return (
+                <code
+                    key={i}
+                    className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold mx-0.5 border ${
+                        theme === 'dark' ? 'bg-black/40 border-white/10 text-cyan-300' : 'bg-gray-100 border-black/10 text-blue-700'
+                    }`}
+                >
+                    {chunk.slice(1, -1)}
+                </code>
+            );
+        }
+        if (chunk.startsWith('**') && chunk.endsWith('**') && chunk.length > 4) {
+            return (
+                <strong key={i} className="font-bold text-foreground">
+                    {chunk.slice(2, -2)}
+                </strong>
+            );
+        }
+        return chunk;
+    });
+}
+
+const MessageContent = ({ content, theme }: { content: string | any, theme: "dark" | "light" }) => {
+    const text = normalizeAssistantMessage(content);
+    if (!text) return null;
+
     // Split text by markdown code blocks
-    const parts = content.split(/(```[\s\S]*?```)/g);
+    const parts = text.split(/(```[\s\S]*?```)/g);
 
     return (
-        <div className="space-y-3 leading-relaxed whitespace-pre-wrap font-sans">
+        <div className="space-y-2 leading-relaxed font-sans text-foreground">
             {parts.map((part, index) => {
                 if (part.startsWith('```')) {
                     const match = part.match(/```([\w-]*)\n([\s\S]*?)```/);
@@ -32,13 +102,15 @@ const MessageContent = ({ content, theme }: { content: string, theme: "dark" | "
                         const language = match[1] || 'text';
                         const code = match[2];
                         return (
-                            <div key={index} className={`relative rounded-xl overflow-hidden border my-3 w-full shadow-lg ${theme === 'dark' ? 'border-white/10 bg-[#0d0d12]' : 'border-black/10 bg-gray-50'
+                            <div key={index} className={`relative rounded-xl overflow-hidden border my-2.5 w-full shadow-md ${
+                                theme === 'dark' ? 'border-white/10 bg-[#0d0d12]' : 'border-black/10 bg-gray-50'
+                            }`}>
+                                <div className={`flex items-center justify-between px-3 py-1.5 border-b ${
+                                    theme === 'dark' ? 'border-white/5 bg-black/60' : 'border-black/5 bg-gray-200'
                                 }`}>
-                                <div className={`flex items-center justify-between px-3 py-1.5 border-b ${theme === 'dark' ? 'border-white/5 bg-black/60' : 'border-black/5 bg-gray-200'
-                                    }`}>
                                     <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">{language}</span>
                                     <button
-                                        className="text-[10px] flex items-center space-x-1 text-muted-foreground hover:text-white transition-colors px-1 py-0.5 rounded"
+                                        className="text-[10px] flex items-center space-x-1 text-muted-foreground hover:text-foreground transition-colors px-1 py-0.5 rounded"
                                         onClick={(e) => {
                                             navigator.clipboard.writeText(code);
                                             const btn = e.currentTarget;
@@ -51,8 +123,9 @@ const MessageContent = ({ content, theme }: { content: string, theme: "dark" | "
                                         <span>Copy</span>
                                     </button>
                                 </div>
-                                <div className={`p-4 overflow-x-auto text-[12px] font-mono leading-normal ${theme === 'dark' ? 'text-emerald-300 bg-black/40' : 'text-blue-700 bg-white'
-                                    }`}>
+                                <div className={`p-3.5 overflow-x-auto text-[12px] font-mono leading-normal ${
+                                    theme === 'dark' ? 'text-emerald-300 bg-black/40' : 'text-blue-700 bg-white'
+                                }`}>
                                     <code>{code}</code>
                                 </div>
                             </div>
@@ -60,17 +133,64 @@ const MessageContent = ({ content, theme }: { content: string, theme: "dark" | "
                     }
                 }
 
-                // For non-code blocks, parse single backticks for inline code
-                const inlineParts = part.split(/`([^`]+)`/g);
+                // Render paragraphs, headings, lists
+                const paragraphs = part.split(/\n\n+/);
+
                 return (
-                    <span key={index} className="text-[13px] block">
-                        {inlineParts.map((chunk, i) =>
-                            i % 2 === 1 ? (
-                                <code key={i} className={`px-1 py-0.5 rounded font-mono text-[11px] font-bold mx-0.5 border ${theme === 'dark' ? 'bg-black/30 border-white/10 text-blue-300' : 'bg-gray-100 border-black/10 text-blue-700'
-                                    }`}>{chunk}</code>
-                            ) : chunk
-                        )}
-                    </span>
+                    <div key={index} className="space-y-2">
+                        {paragraphs.map((para, pIdx) => {
+                            const trimmed = para.trim();
+                            if (!trimmed) return null;
+
+                            if (trimmed.startsWith('### ')) {
+                                return (
+                                    <h4 key={pIdx} className="font-bold text-sm text-foreground mt-2 mb-1">
+                                        {renderInlineMarkdown(trimmed.slice(4), theme)}
+                                    </h4>
+                                );
+                            }
+
+                            if (trimmed.startsWith('## ') || trimmed.startsWith('# ')) {
+                                const cleanHeading = trimmed.replace(/^#+\s*/, '');
+                                return (
+                                    <h3 key={pIdx} className="font-bold text-base text-foreground mt-2.5 mb-1">
+                                        {renderInlineMarkdown(cleanHeading, theme)}
+                                    </h3>
+                                );
+                            }
+
+                            const lines = trimmed.split('\n');
+                            const isList = lines.length > 1 && lines.every(l => /^[-*•]\s+/.test(l.trim()) || /^\d+\.\s+/.test(l.trim()));
+
+                            if (isList) {
+                                return (
+                                    <ul key={pIdx} className="space-y-1 my-1 pl-1">
+                                        {lines.map((line, lIdx) => {
+                                            const trimmedLine = line.trim();
+                                            const isOrdered = /^\d+\.\s+/.test(trimmedLine);
+                                            const itemContent = trimmedLine.replace(/^([-*•]|\d+\.)\s+/, '');
+                                            return (
+                                                <li key={lIdx} className="text-[13px] leading-relaxed flex items-start gap-2">
+                                                    <span className="text-primary font-bold text-xs select-none mt-0.5">
+                                                        {isOrdered ? `${lIdx + 1}.` : '•'}
+                                                    </span>
+                                                    <span className="flex-1">
+                                                        {renderInlineMarkdown(itemContent, theme)}
+                                                    </span>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                );
+                            }
+
+                            return (
+                                <p key={pIdx} className="text-[13px] leading-relaxed whitespace-pre-wrap">
+                                    {renderInlineMarkdown(trimmed, theme)}
+                                </p>
+                            );
+                        })}
+                    </div>
                 );
             })}
         </div>

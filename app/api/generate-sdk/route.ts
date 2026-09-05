@@ -1,20 +1,7 @@
 import { NextResponse } from 'next/server';
 import { aiService, TaskType } from '@/services/ai';
 import { aggressiveTrimSpec } from '@/lib/specTrimmer';
-
-function safeParseJSON(raw: string) {
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    if (start === -1 || end === -1) throw new Error('No JSON found');
-    let jsonStr = raw.slice(start, end + 1);
-    jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, (ch) => {
-        if (ch === '\n') return '\\n';
-        if (ch === '\r') return '\\r';
-        if (ch === '\t') return '\\t';
-        return '';
-    });
-    return JSON.parse(jsonStr);
-}
+import { safeExtractJSON } from '@/lib/safeJson';
 
 export async function POST(req: Request) {
     try {
@@ -57,12 +44,13 @@ CRITICAL: Your entire response must be a single valid JSON object with no text b
         });
 
         const metaText = metaCompletion.text || metaCompletion.content || '';
-        let metadata: any;
-        try {
-            metadata = JSON.parse(metaText);
-        } catch (e) {
-            metadata = safeParseJSON(metaText);
-        }
+        const fallbackMeta = {
+            className: 'ApiClient',
+            usageExample: `// Initialize ${language} client\nconst client = new ApiClient({ baseUrl: 'https://api.example.com' });`,
+            dependencies: language === 'python' ? ['requests'] : ['axios']
+        };
+
+        const metadata = safeExtractJSON(metaText, fallbackMeta);
 
         // Call 2: Raw SDK Code
         const codeSystemPrompt = `You are a senior SDK engineer. Generate a highly professional, modern, and production-ready SDK class for the provided OpenAPI specification in ${language}.
