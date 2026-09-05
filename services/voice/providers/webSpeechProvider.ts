@@ -7,6 +7,7 @@ export class WebSpeechProvider implements SpeechToTextProvider, TextToSpeechProv
     private recognition: any = null;
     private isRunning = false;
     private currentTranscript = '';
+    private currentUtterance: SpeechSynthesisUtterance | null = null;
     private onCompletedResolver: ((text: string) => void) | null = null;
     private onErrorRejecter: ((err: any) => void) | null = null;
 
@@ -16,7 +17,7 @@ export class WebSpeechProvider implements SpeechToTextProvider, TextToSpeechProv
     }
 
     public async isAvailable(): Promise<boolean> {
-        return !!this.getSpeechRecognitionClass();
+        return !!this.getSpeechRecognitionClass() || (typeof window !== 'undefined' && !!window.speechSynthesis);
     }
 
     public async getCapabilities(): Promise<VoiceCapabilities> {
@@ -34,7 +35,7 @@ export class WebSpeechProvider implements SpeechToTextProvider, TextToSpeechProv
     public async startListening(options?: VoiceListenOptions): Promise<void> {
         const SpeechClass = this.getSpeechRecognitionClass();
         if (!SpeechClass) {
-            throw new Error('Web Speech API is not supported in this browser. Please use Chrome, Edge, or Android Orion APK.');
+            throw new Error('Web Speech API is not supported in this browser. Please use Google Chrome, Microsoft Edge, or the Orion Android APK.');
         }
 
         if (this.isRunning) {
@@ -153,10 +154,14 @@ export class WebSpeechProvider implements SpeechToTextProvider, TextToSpeechProv
             throw new Error('SpeechSynthesis is not supported in this environment.');
         }
 
-        // Cancel ongoing utterance
+        // Cancel and resume speech synthesis (required by mobile Chrome)
         window.speechSynthesis.cancel();
+        if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+        }
 
         const utterance = new SpeechSynthesisUtterance(text);
+        this.currentUtterance = utterance;
         utterance.lang = options?.language || 'en-US';
         utterance.rate = options?.rate || 1.0;
         utterance.pitch = options?.pitch || 1.0;
@@ -177,20 +182,30 @@ export class WebSpeechProvider implements SpeechToTextProvider, TextToSpeechProv
         };
 
         utterance.onend = () => {
+            this.currentUtterance = null;
             options?.onEnd?.();
         };
 
         utterance.onerror = (e) => {
             console.error('[TTS DEBUG] Web Speech synthesis error:', e);
+            this.currentUtterance = null;
             options?.onError?.(e);
         };
 
         window.speechSynthesis.speak(utterance);
+
+        // Workaround for mobile browsers where speak might be paused initially
+        setTimeout(() => {
+            if (window.speechSynthesis && window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+            }
+        }, 100);
     }
 
     public async stop(): Promise<void> {
         if (typeof window !== 'undefined' && window.speechSynthesis) {
             window.speechSynthesis.cancel();
+            this.currentUtterance = null;
         }
     }
 

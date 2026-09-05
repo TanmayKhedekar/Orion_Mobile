@@ -51,7 +51,8 @@ public class OrionVoicePlugin extends Plugin {
         boolean isSnapdragon = hardware.contains("qcom") || board.contains("qcom") || hardware.contains("snapdragon");
 
         JSObject ret = new JSObject();
-        ret.put("available", available);
+        ret.put("available", true);
+        ret.put("speechAvailable", available);
         ret.put("provider", onDeviceAvailable ? "Android On-Device Speech Recognizer (Snapdragon)" : "Android Speech Recognizer");
         ret.put("model", onDeviceAvailable ? "Whisper-compatible On-Device ASR" : "System ASR Engine");
         ret.put("onDevice", onDeviceAvailable);

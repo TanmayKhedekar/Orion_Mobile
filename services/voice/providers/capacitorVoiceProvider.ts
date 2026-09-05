@@ -34,10 +34,24 @@ export class CapacitorVoiceProvider implements SpeechToTextProvider, TextToSpeec
         try {
             if (typeof window === 'undefined') return false;
             const cap = (window as any).Capacitor;
-            if (!cap || !cap.isNativePlatform()) return false;
+            if (!cap) return false;
 
-            const res = await OrionVoiceNative.isAvailable();
-            return !!res?.available;
+            const isNative = typeof cap.isNativePlatform === 'function'
+                ? cap.isNativePlatform()
+                : (cap.platform === 'android' || cap.platform === 'ios');
+            const isPluginRegistered = typeof cap.isPluginAvailable === 'function'
+                ? cap.isPluginAvailable('OrionVoice')
+                : true;
+
+            if (isNative || isPluginRegistered) {
+                try {
+                    const res = await OrionVoiceNative.isAvailable();
+                    return res ? !!res.available : isNative;
+                } catch {
+                    return isNative;
+                }
+            }
+            return false;
         } catch {
             return false;
         }

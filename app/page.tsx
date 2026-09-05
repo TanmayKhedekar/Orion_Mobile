@@ -1028,49 +1028,69 @@ export default function Home() {
     const renderAiChatPanel = (mobile = false) => (
         <>
             {mobile && <div className="ai-drag-handle" />}
-            <div className={`${mobile ? "p-3 ai-header" : "p-3.5"} border-b border-border bg-card/80 backdrop-blur font-medium flex items-center justify-between flex-shrink-0 ai-header gap-2`}>
-                <div className="flex items-center space-x-2">
-                    {mobile && (
-                        <Button variant="ghost" size="icon" className="min-touch h-10 w-10" onClick={() => setMobileAiOpen(false)} aria-label="Back">
-                            <ArrowLeft className="w-5 h-5" />
-                        </Button>
-                    )}
-                    <Bot className="w-5 h-5 text-primary flex-shrink-0" />
-                    <span className="text-sm font-bold">AI Assistant</span>
+            <div className="border-b border-border bg-card/90 backdrop-blur flex-shrink-0">
+                <div className={`${mobile ? "p-3" : "p-3.5"} flex items-center justify-between gap-2`}>
+                    <div className="flex items-center space-x-2 min-w-0">
+                        {mobile && (
+                            <Button variant="ghost" size="icon" className="min-touch h-10 w-10 flex-shrink-0" onClick={() => setMobileAiOpen(false)} aria-label="Back">
+                                <ArrowLeft className="w-5 h-5" />
+                            </Button>
+                        )}
+                        <Bot className="w-5 h-5 text-primary flex-shrink-0" />
+                        <span className="text-sm font-bold truncate">Orion AI Assistant</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        {/* Audio ON / OFF Toggle */}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setAutoSpeak(prev => !prev);
+                                if (ttsState === 'SPEAKING') {
+                                    ttsService.stop();
+                                }
+                            }}
+                            className={`min-touch px-2.5 py-1.5 rounded-lg border text-xs flex items-center gap-1.5 transition-all flex-shrink-0 ${
+                                autoSpeak
+                                    ? 'bg-primary/25 border-primary text-primary font-bold shadow-sm'
+                                    : 'bg-secondary/40 border-border text-foreground hover:bg-secondary'
+                            }`}
+                            title={autoSpeak ? "Auto-Speak Responses: ON (AI reads answers aloud)" : "Auto-Speak Responses: OFF"}
+                        >
+                            {autoSpeak ? <Volume2 className="w-4 h-4 text-primary animate-pulse" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
+                            <span className="text-xs font-bold">{autoSpeak ? "Audio ON" : "Audio OFF"}</span>
+                        </button>
+                        {mobile && (
+                            <Button variant="ghost" size="icon" className="min-touch h-10 w-10 flex-shrink-0" onClick={() => setMobileAiOpen(false)} aria-label="Close AI Assistant">
+                                <X className="w-5 h-5" />
+                            </Button>
+                        )}
+                    </div>
                 </div>
-                <div className="flex items-center space-x-1.5">
-                    {/* Auto Speak Toggle */}
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setAutoSpeak(prev => !prev);
-                            if (ttsState === 'SPEAKING') {
-                                ttsService.stop();
-                            }
-                        }}
-                        className={`p-1.5 px-2 rounded-lg border text-xs flex items-center gap-1 transition-all ${
-                            autoSpeak
-                                ? 'bg-primary/20 border-primary/40 text-primary font-semibold'
-                                : 'bg-transparent border-white/5 text-muted-foreground hover:text-foreground hover:bg-white/5'
-                        }`}
-                        title={autoSpeak ? "Auto-Speak Responses: ON (AI reads responses aloud)" : "Auto-Speak Responses: OFF"}
-                    >
-                        {autoSpeak ? <Volume2 className="w-3.5 h-3.5 text-primary" /> : <VolumeX className="w-3.5 h-3.5" />}
-                        <span className="text-[11px] hidden sm:inline">{autoSpeak ? "Audio ON" : "Audio OFF"}</span>
-                    </button>
-                    {renderRoutingModeSelector(true)}
-                    {mobile && (
-                        <Button variant="ghost" size="icon" className="min-touch h-10 w-10" onClick={() => setMobileAiOpen(false)} aria-label="Close AI Assistant">
-                            <X className="w-5 h-5" />
-                        </Button>
-                    )}
+
+                {/* Sub-Header: Routing Mode & Speech Language Selector */}
+                <div className="px-3 pb-2.5 pt-1.5 flex items-center justify-between gap-2 flex-wrap border-t border-white/5 bg-card/40">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground/80 text-[11px]">Mode:</span>
+                        {renderRoutingModeSelector(true)}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => setVoiceLang(l => (l === 'en-US' ? 'hi-IN' : 'en-US'))}
+                            className="text-[11px] font-mono px-2 py-1 rounded-md border border-primary/30 bg-primary/10 text-primary font-semibold flex items-center gap-1 min-h-[30px]"
+                            title="Toggle Speech Language"
+                        >
+                            <Languages className="w-3.5 h-3.5" />
+                            <span>{voiceLang === 'en-US' ? 'EN (English)' : 'HI (Hindi)'}</span>
+                        </button>
+                    </div>
                 </div>
             </div>
             <div className="ai-mobile-content flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 min-h-0">
                 {messages.filter(m => m.role !== 'system').length === 0 && (
                     <div className="text-center text-sm text-muted-foreground p-4 rounded-xl border border-dashed border-border">
                         <Bot className="w-8 h-8 mx-auto mb-2 text-primary/60" />
-                        How can I help? Ask me to write Python code, explain auth, or generate a cURL command for this endpoint!
+                        How can I help? Ask me to write Python code, explain auth, or tap the microphone below to speak!
                     </div>
                 )}
                 {messages.filter(m => m.role !== 'system').map((m, idx) => (
@@ -1080,7 +1100,7 @@ export default function Home() {
                                 {m.role === 'user' ? m.content : <MessageContent content={m.content} theme={theme} />}
                             </div>
                             {m.role === 'assistant' && (
-                                <div className="mt-2.5 pt-1.5 border-t border-white/10 flex items-center justify-between flex-wrap gap-1.5 text-[10px] text-muted-foreground font-mono">
+                                <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between flex-wrap gap-2 text-[10px] text-muted-foreground font-mono">
                                     <div className="flex items-center gap-1.5" title={m.routingDecision?.reason}>
                                         {m.routingDecision && (
                                             <>
@@ -1099,22 +1119,22 @@ export default function Home() {
                                     <button
                                         type="button"
                                         onClick={() => handleToggleSpeak(m.content, `msg_${idx}`)}
-                                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] transition-all font-sans ${
+                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all min-touch font-sans ${
                                             activeSpeakingId === `msg_${idx}` && ttsState === 'SPEAKING'
-                                                ? 'bg-primary text-primary-foreground font-semibold shadow-sm animate-pulse'
-                                                : 'hover:bg-white/10 text-muted-foreground hover:text-foreground border border-white/5'
+                                                ? 'bg-primary text-primary-foreground font-bold shadow-md animate-pulse ring-2 ring-primary/40'
+                                                : 'bg-primary/15 hover:bg-primary/25 text-primary font-medium border border-primary/30'
                                         }`}
-                                        title={activeSpeakingId === `msg_${idx}` && ttsState === 'SPEAKING' ? "Stop reading" : "Read message aloud (Text-to-Speech)"}
+                                        title={activeSpeakingId === `msg_${idx}` && ttsState === 'SPEAKING' ? "Stop reading" : "Read message aloud"}
                                     >
                                         {activeSpeakingId === `msg_${idx}` && ttsState === 'SPEAKING' ? (
                                             <>
                                                 <VolumeX className="w-3.5 h-3.5 text-red-300" />
-                                                <span className="font-semibold">Stop</span>
+                                                <span className="font-semibold">Stop Audio</span>
                                             </>
                                         ) : (
                                             <>
                                                 <Volume2 className="w-3.5 h-3.5" />
-                                                <span>Read</span>
+                                                <span className="font-semibold">🔊 Read Aloud</span>
                                             </>
                                         )}
                                     </button>
@@ -1179,49 +1199,41 @@ export default function Home() {
                             }
                         }}
                         placeholder={voiceState === 'LISTENING' ? "Listening... speak now" : "Ask the AI or tap mic to speak..."}
-                        className="resize-none pr-24 min-h-[52px] py-3 glassmorphism text-base"
+                        className="resize-none pr-28 min-h-[54px] py-3.5 glassmorphism text-base rounded-xl"
                     />
-                    <div className="absolute right-2 top-2 flex items-center space-x-1">
+                    <div className="absolute right-2 top-2 flex items-center space-x-1.5">
                         <Button
                             size="icon"
                             type="button"
                             variant="ghost"
-                            className={`voice-btn min-touch h-10 w-10 ${
+                            className={`min-touch h-10 w-10 rounded-xl transition-all ${
                                 voiceState === 'LISTENING' || voiceState === 'TRANSCRIBING'
-                                    ? 'voice-listening-pulse'
-                                    : 'text-muted-foreground hover:text-primary'
+                                    ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse ring-2 ring-red-500/30'
+                                    : 'bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 shadow-xs'
                             }`}
                             onClick={handleToggleVoice}
                             aria-label={voiceState === 'LISTENING' ? "Stop recording" : "Voice input"}
-                            title={voiceState === 'LISTENING' ? "Stop recording" : "Voice input (On-Device STT / Snapdragon NPU)"}
+                            title={voiceState === 'LISTENING' ? "Stop recording" : "Voice input (Speech-to-Text)"}
                         >
                             {voiceState === 'LISTENING' || voiceState === 'TRANSCRIBING' ? (
                                 <MicOff className="w-5 h-5 text-red-500" />
                             ) : (
-                                <Mic className="w-5 h-5" />
+                                <Mic className="w-5 h-5 text-primary" />
                             )}
                         </Button>
                         <Button
                             size="icon"
                             variant="ghost"
-                            className="min-touch h-10 w-10 text-muted-foreground hover:text-primary"
+                            className="min-touch h-10 w-10 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                             onClick={() => handleSendMessage(chatInput)}
                             aria-label="Send message"
+                            title="Send message"
                         >
                             <Send className="w-4 h-4" />
                         </Button>
                     </div>
                 </div>
                 <div className="ai-quick-actions scroll-x-touch flex items-center gap-2 mt-2 pt-1">
-                    <button
-                        type="button"
-                        onClick={() => setVoiceLang(l => (l === 'en-US' ? 'hi-IN' : 'en-US'))}
-                        className="text-[11px] font-mono px-2.5 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary font-semibold flex items-center gap-1 min-h-[36px]"
-                        title="Toggle Speech Language"
-                    >
-                        <Languages className="w-3.5 h-3.5" />
-                        <span>{voiceLang === 'en-US' ? 'EN' : 'HI (Hindi)'}</span>
-                    </button>
                     {["Generate Python Code", "Generate cURL", "Explain Endpoint"].map((suggestion) => (
                         <button
                             key={suggestion}
@@ -2891,15 +2903,19 @@ export default function Home() {
                         {renderAiChatPanel(true)}
                     </div>
 
-                    {/* Mobile AI FAB (available across all features) */}
+                    {/* Mobile AI & Voice FAB (available across all features) */}
                     {!mobileAiOpen && (
                         <button
                             type="button"
                             className="ai-mobile-fab lg:hidden"
-                            onClick={() => setMobileAiOpen(true)}
-                            aria-label="Open AI Assistant"
+                            onClick={() => {
+                                setMobileAiOpen(true);
+                                handleToggleVoice();
+                            }}
+                            aria-label="Open Voice AI Assistant"
+                            title="Speak with Orion Voice AI"
                         >
-                            <Bot className="w-6 h-6" />
+                            <Mic className="w-6 h-6 text-white" />
                         </button>
                     )}
 
@@ -2925,6 +2941,22 @@ export default function Home() {
                             <span className="text-[11px]">Explorer</span>
                         </button>
 
+                        {/* Highlighted Voice AI Action */}
+                        <button
+                            type="button"
+                            className={`mobile-bottom-nav__item ${voiceState === 'LISTENING' ? 'active text-primary' : 'text-primary'}`}
+                            onClick={() => {
+                                setMobileAiOpen(true);
+                                handleToggleVoice();
+                            }}
+                            aria-label="Voice AI"
+                        >
+                            <div className="p-1 rounded-full bg-primary/20 border border-primary/40">
+                                <Mic className="w-5 h-5 text-primary" />
+                            </div>
+                            <span className="text-[11px] font-bold text-primary">Voice AI</span>
+                        </button>
+
                         <button
                             type="button"
                             className={`mobile-bottom-nav__item ${mode === 'intent' ? 'active' : ''}`}
@@ -2933,16 +2965,6 @@ export default function Home() {
                         >
                             <Sparkles className="w-5 h-5" />
                             <span className="text-[11px]">Intent</span>
-                        </button>
-
-                        <button
-                            type="button"
-                            className={`mobile-bottom-nav__item ${mode === 'diff' ? 'active' : ''}`}
-                            onClick={() => handleSetMode('diff')}
-                            aria-label="Diff"
-                        >
-                            <RefreshCw className="w-5 h-5" />
-                            <span className="text-[11px]">Diff</span>
                         </button>
 
                         <button
