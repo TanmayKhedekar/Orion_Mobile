@@ -1,12 +1,5 @@
 import { NextResponse } from 'next/server';
-import Groq from 'groq-sdk';
-
-let groq: Groq;
-try {
-    groq = new Groq({
-        apiKey: process.env.GROQ_API_KEY || 'dummy_key_for_build',
-    });
-} catch (e) { }
+import { aiService, TaskType } from '@/services/ai';
 
 function safeParseJSON(raw: string) {
     const start = raw.indexOf('{');
@@ -24,14 +17,8 @@ function safeParseJSON(raw: string) {
 
 export async function POST(req: Request) {
     try {
-        const { responseBody, nextEndpoint } = await req.json();
-
-        if (!process.env.GROQ_API_KEY) {
-            return NextResponse.json(
-                { error: 'Groq API key not configured' },
-                { status: 500 }
-            );
-        }
+        const body = await req.json();
+        const { responseBody, nextEndpoint, provider, model, routingMode } = body;
 
         const systemPrompt = `You are an AI API Chaining Assistant. Your task is to analyze the response JSON of a previous API call and a target next endpoint's parameter schema, then suggest how values from the previous response should map to the next endpoint's inputs (parameters or body fields).
 
@@ -59,7 +46,13 @@ Summary: ${nextEndpoint?.summary || ''}
 Parameters: ${JSON.stringify(nextEndpoint?.parameters || [], null, 2)}
 Request Body Schema: ${JSON.stringify(nextEndpoint?.requestBody || null, null, 2)}`;
 
-        const completion = await groq.chat.completions.create({
+        const completion = await aiService.execute({
+            taskType: TaskType.PARAMETER_EXPLANATION,
+            routingMode,
+            provider,
+            model,
+            temperature: 0.2,
+            maxTokens: 1500,
             messages: [
                 {
                     role: 'system',
@@ -70,12 +63,9 @@ Request Body Schema: ${JSON.stringify(nextEndpoint?.requestBody || null, null, 2
                     content: userContent
                 }
             ],
-            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
-            temperature: 0.2,
-            max_tokens: 1500,
         });
 
-        const textContent = completion.choices[0]?.message?.content || '';
+        const textContent = completion.text || completion.content || '';
 
         let jsonResult: any;
         try {
@@ -84,49 +74,15 @@ Request Body Schema: ${JSON.stringify(nextEndpoint?.requestBody || null, null, 2
             jsonResult = safeParseJSON(textContent);
         }
 
-        if (!jsonResult.suggestions) {
-            jsonResult.suggestions = [];
+        if (!jsonResult || !jsonResult.suggestions) {
+            jsonResult = { suggestions: [] };
         }
+
+        jsonResult.routingDecision = completion.routingDecision;
 
         return NextResponse.json(jsonResult);
     } catch (error: any) {
-        console.error('Route error:', error);
-
-        const errorMessage = error?.message || error?.error?.message || '';
-        const status = error?.status || 500;
-
-        // Token limit exceeded
-        if (status === 413 || errorMessage.includes('Request too large') || errorMessage.includes('tokens per minute')) {
-            return NextResponse.json({
-                error: 'spec_too_large',
-                userMessage: 'This API spec is too large to process on our current plan. We\'ve loaded the first 15 endpoints for you — try using a smaller spec or a specific section of this API.',
-                tip: 'Large specs like Spotify or OpenAI work best with targeted queries on specific endpoint groups.'
-            }, { status: 413 });
-        }
-
-        // Context length exceeded
-        if (status === 400 && errorMessage.includes('reduce the length')) {
-            return NextResponse.json({
-                error: 'context_too_long',
-                userMessage: 'This API spec has too many endpoints to generate a complete SDK at once. Showing results for the first 15 endpoints.',
-                tip: 'Try loading a smaller API spec for full SDK generation.'
-            }, { status: 400 });
-        }
-
-        // Rate limit
-        if (status === 429) {
-            return NextResponse.json({
-                error: 'rate_limit',
-                userMessage: 'Daily AI quota reached. Please try again in a few minutes.',
-                tip: 'Our free-tier AI plan resets every hour.'
-            }, { status: 429 });
-        }
-
-        // Generic fallback
-        return NextResponse.json({
-            error: 'ai_error',
-            userMessage: 'Something went wrong with the AI response. Please try again.',
-        }, { status: 500 });
+        console.error('Route error in /api/suggest-chain:', error);
+        return aiService.formatErrorResponse(error);
     }
 }
-

@@ -5,9 +5,15 @@
 4 silly config load:file:D:\Projects\OrionAI\AgentifAI\.npmrc
 5 silly config load:file:C:\Users\Asus\.npmrc
 6 silly config load:file:D:\Projects\OrionAI\AgentifAI\%USERPROFILE%\npm\etc\npmrc
-7 verbose title npm run dev
-8 verbose argv "run" "dev"
-9 verbose logfile logs-max:10 dir:D:\Projects\OrionAI\AgentifAI\%USERPROFILE%\npm-cache\_logs\2026-09-01T07_38_46_940Z-
-10 verbose logfile D:\Projects\OrionAI\AgentifAI\%USERPROFILE%\npm-cache\_logs\2026-09-01T07_38_46_940Z-debug-0.log
+7 verbose title npm run build
+8 verbose argv "run" "build"
+9 verbose logfile logs-max:10 dir:D:\Projects\OrionAI\AgentifAI\%USERPROFILE%\npm-cache\_logs\2026-09-05T06_43_16_418Z-
+10 verbose logfile D:\Projects\OrionAI\AgentifAI\%USERPROFILE%\npm-cache\_logs\2026-09-05T06_43_16_418Z-debug-0.log
 11 silly logfile start cleaning logs, removing 1 files
 12 silly logfile done cleaning log files
+13 verbose cwd D:\Projects\OrionAI\AgentifAI
+14 verbose os Windows_NT 10.0.26200
+15 verbose node v22.19.0
+16 verbose npm  v10.9.3
+17 verbose exit 0
+18 info ok

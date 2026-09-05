@@ -194,6 +194,7 @@ export default function Home() {
         { key: "", value: "" }
     ]);
     const [isVarStoreOpen, setIsVarStoreOpen] = useState(true);
+    const [routingMode, setRoutingMode] = useState<"auto" | "local" | "cloud" | "groq">("auto");
 
     // Mobile presentation state (UI only)
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -314,7 +315,7 @@ export default function Home() {
             const res = await fetch("/api/intent", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ goal: intentGoal, specs: spec ? [spec] : [] })
+                body: JSON.stringify({ goal: intentGoal, specs: spec ? [spec] : [], routingMode })
             });
             const data = await res.json();
             if (!res.ok || data.error) {
@@ -353,7 +354,7 @@ export default function Home() {
             const res = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ messages: reqMessages })
+                body: JSON.stringify({ messages: reqMessages, routingMode })
             });
 
             const data = await res.json();
@@ -366,7 +367,13 @@ export default function Home() {
                 return;
             }
 
-            setMessages([...newMessages, { role: "assistant", content: data.content }]);
+            setMessages([...newMessages, {
+                role: "assistant",
+                content: data.content,
+                provider: data.provider,
+                model: data.model,
+                routingDecision: data.routingDecision
+            }]);
         } catch (err: any) {
             setMessages([...newMessages, { role: "assistant", content: `Error: ${err.message}` }]);
         } finally {
@@ -495,7 +502,8 @@ export default function Home() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     responseBody: testResponse.data,
-                    nextEndpoint: selectedEndpoint
+                    nextEndpoint: selectedEndpoint,
+                    routingMode
                 })
             });
             const data = await res.json();
@@ -537,7 +545,7 @@ export default function Home() {
             const res = await fetch("/api/diff", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ specA: specAStr, specB: specBStr })
+                body: JSON.stringify({ specA: specAStr, specB: specBStr, routingMode })
             });
             const data = await res.json();
             if (!res.ok || data.error) {
@@ -562,7 +570,7 @@ export default function Home() {
             const res = await fetch("/api/security-audit", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ spec: specStr })
+                body: JSON.stringify({ spec: specStr, routingMode })
             });
             const data = await res.json();
             if (!res.ok || data.error) {
@@ -604,7 +612,8 @@ export default function Home() {
                     requestHeaders: { "Accept": "application/json", ...(selectedEndpoint.requestBody && testParams.body ? { "Content-Type": "application/json" } : {}) },
                     requestUrl: fullUrl,
                     requestMethod: selectedEndpoint.method,
-                    requestBody: selectedEndpoint.requestBody ? testParams.body : undefined
+                    requestBody: selectedEndpoint.requestBody ? testParams.body : undefined,
+                    routingMode
                 })
             });
             const data = await res.json();
@@ -635,7 +644,7 @@ export default function Home() {
             const res = await fetch("/api/generate-sdk", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ spec: specStr, language: sdkLang })
+                body: JSON.stringify({ spec: specStr, language: sdkLang, routingMode })
             });
             const data = await res.json();
             if (!res.ok || data.error) {
@@ -721,23 +730,51 @@ export default function Home() {
         </div>
     );
 
+    const renderRoutingModeSelector = (compact = false) => (
+        <div className="inline-flex items-center rounded-xl p-1 bg-card/60 border border-border/80 shadow-xs" role="group" aria-label="AI Routing Mode">
+            {[
+                { id: "auto", label: "Auto", icon: "⚡", title: "Auto Mode: Deterministic Hybrid Task Routing" },
+                { id: "cloud", label: "Cloud", icon: "☁️", title: "Cloud Mode: Organizer Cloud AI / Groq" },
+                { id: "local", label: "Local", icon: "🧠", title: "Local Mode: Qualcomm Snapdragon On-Device NPU (Stub)" },
+            ].map((m) => (
+                <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setRoutingMode(m.id as any)}
+                    title={m.title}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                        routingMode === m.id
+                            ? "bg-primary text-primary-foreground font-bold shadow-xs scale-100"
+                            : "text-muted-foreground hover:text-foreground hover:bg-white/5 scale-[0.98]"
+                    }`}
+                >
+                    <span>{m.icon}</span>
+                    <span className={compact ? "hidden sm:inline" : "inline"}>{m.label}</span>
+                </button>
+            ))}
+        </div>
+    );
+
     const renderAiChatPanel = (mobile = false) => (
         <>
-            <div className={`${mobile ? "p-3 ai-header" : "p-4"} border-b border-border bg-card/80 backdrop-blur font-medium flex items-center justify-between flex-shrink-0 ai-header`}>
+            <div className={`${mobile ? "p-3 ai-header" : "p-3.5"} border-b border-border bg-card/80 backdrop-blur font-medium flex items-center justify-between flex-shrink-0 ai-header gap-2`}>
                 <div className="flex items-center space-x-2">
                     {mobile && (
                         <Button variant="ghost" size="icon" className="min-touch h-10 w-10" onClick={() => setMobileAiOpen(false)} aria-label="Back">
                             <ArrowLeft className="w-5 h-5" />
                         </Button>
                     )}
-                    <Bot className="w-5 h-5 text-primary" />
-                    <span>AI Assistant</span>
+                    <Bot className="w-5 h-5 text-primary flex-shrink-0" />
+                    <span className="text-sm font-bold">AI Assistant</span>
                 </div>
-                {mobile && (
-                    <Button variant="ghost" size="icon" className="min-touch h-10 w-10" onClick={() => setMobileAiOpen(false)} aria-label="Close AI Assistant">
-                        <X className="w-5 h-5" />
-                    </Button>
-                )}
+                <div className="flex items-center space-x-2">
+                    {renderRoutingModeSelector(true)}
+                    {mobile && (
+                        <Button variant="ghost" size="icon" className="min-touch h-10 w-10" onClick={() => setMobileAiOpen(false)} aria-label="Close AI Assistant">
+                            <X className="w-5 h-5" />
+                        </Button>
+                    )}
+                </div>
             </div>
             <div className="ai-mobile-content flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 min-h-0">
                 {messages.filter(m => m.role !== 'system').length === 0 && (
@@ -752,6 +789,18 @@ export default function Home() {
                             <div className={`px-0 py-0 break-anywhere ${m.role === 'user' ? 'text-[13px] whitespace-pre-wrap' : ''}`}>
                                 {m.role === 'user' ? m.content : <MessageContent content={m.content} theme={theme} />}
                             </div>
+                            {m.role === 'assistant' && m.routingDecision && (
+                                <div className="mt-2.5 pt-1.5 border-t border-white/10 flex items-center flex-wrap gap-1.5 text-[10px] text-muted-foreground font-mono" title={m.routingDecision.reason}>
+                                    <span className="px-1.5 py-0.5 rounded bg-primary/20 text-primary font-bold border border-primary/30">
+                                        {m.routingDecision.mode === 'auto' ? '⚡ AUTO' : m.routingDecision.mode === 'cloud' ? '☁️ CLOUD' : '🧠 LOCAL'}
+                                    </span>
+                                    <span>→</span>
+                                    <span className="text-foreground/90 font-semibold">{m.routingDecision.provider.toUpperCase()}</span>
+                                    {m.routingDecision.fallbackApplied && (
+                                        <span className="text-amber-400 text-[9px] font-sans">(fallback)</span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
@@ -1199,7 +1248,8 @@ export default function Home() {
                             </button>
                         </div>
                     </div>
-                    <div className="flex justify-end items-center space-x-2">
+                    <div className="flex justify-end items-center space-x-3">
+                        {renderRoutingModeSelector()}
                         {user && (
                             <Button
                                 variant="ghost"

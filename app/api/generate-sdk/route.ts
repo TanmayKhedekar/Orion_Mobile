@@ -1,13 +1,6 @@
 import { NextResponse } from 'next/server';
-import Groq from 'groq-sdk';
+import { aiService, TaskType } from '@/services/ai';
 import { aggressiveTrimSpec } from '@/lib/specTrimmer';
-
-let groq: Groq;
-try {
-    groq = new Groq({
-        apiKey: process.env.GROQ_API_KEY || 'dummy_key_for_build',
-    });
-} catch (e) { }
 
 function safeParseJSON(raw: string) {
     const start = raw.indexOf('{');
@@ -25,11 +18,8 @@ function safeParseJSON(raw: string) {
 
 export async function POST(req: Request) {
     try {
-        const { spec, language } = await req.json();
-
-        if (!process.env.GROQ_API_KEY) {
-            return NextResponse.json({ error: 'Groq API key not configured' }, { status: 500 });
-        }
+        const body = await req.json();
+        const { spec, language, provider, model, routingMode } = body;
 
         let trimmedSpec = spec;
         if (spec) {
@@ -53,17 +43,20 @@ Return ONLY a JSON object with these fields:
 No code field. No markdown. Pure JSON only.
 CRITICAL: Your entire response must be a single valid JSON object with no text before or after it.`;
 
-        const metaCompletion = await groq.chat.completions.create({
+        const metaCompletion = await aiService.execute({
+            taskType: TaskType.CODE_GENERATION,
+            routingMode,
+            provider,
+            model,
+            temperature: 0.1,
+            maxTokens: 2000,
             messages: [
                 { role: 'system', content: metaSystemPrompt },
                 { role: 'user', content: userContent }
             ],
-            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
-            temperature: 0.1,
-            max_tokens: 2000,
         });
 
-        const metaText = metaCompletion.choices[0]?.message?.content || '';
+        const metaText = metaCompletion.text || metaCompletion.content || '';
         let metadata: any;
         try {
             metadata = JSON.parse(metaText);
@@ -85,17 +78,20 @@ CRITICAL INSTRUCTIONS for SDK Code:
 
 Return ONLY the raw ${language} code for the SDK class. No JSON wrapper. No markdown fences. No explanation. Just the pure code starting from the import statements or class definition.`;
 
-        const codeCompletion = await groq.chat.completions.create({
+        const codeCompletion = await aiService.execute({
+            taskType: TaskType.CODE_GENERATION,
+            routingMode,
+            provider,
+            model,
+            temperature: 0.1,
+            maxTokens: 6000,
             messages: [
                 { role: 'system', content: codeSystemPrompt },
                 { role: 'user', content: userContent }
             ],
-            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
-            temperature: 0.1,
-            max_tokens: 6000,
         });
 
-        let rawCode = codeCompletion.choices[0]?.message?.content || '';
+        let rawCode = codeCompletion.text || codeCompletion.content || '';
 
         // Minor cleanup just in case LLM still returns markdown fences despite instructions
         rawCode = rawCode.trim();
@@ -110,50 +106,16 @@ Return ONLY the raw ${language} code for the SDK class. No JSON wrapper. No mark
         }
 
         const llmResult = {
-            className: metadata.className,
-            usageExample: metadata.usageExample,
-            dependencies: metadata.dependencies,
-            code: rawCode
+            className: metadata?.className || 'ApiClient',
+            usageExample: metadata?.usageExample || '',
+            dependencies: metadata?.dependencies || [],
+            code: rawCode,
+            routingDecision: codeCompletion.routingDecision
         };
 
         return NextResponse.json(llmResult);
     } catch (error: any) {
-        console.error('Route error:', error);
-
-        const errorMessage = error?.message || error?.error?.message || '';
-        const status = error?.status || 500;
-
-        // Token limit exceeded
-        if (status === 413 || errorMessage.includes('Request too large') || errorMessage.includes('tokens per minute')) {
-            return NextResponse.json({
-                error: 'spec_too_large',
-                userMessage: 'This API spec is too large to process on our current plan. We\'ve loaded the first 15 endpoints for you — try using a smaller spec or a specific section of this API.',
-                tip: 'Large specs like Spotify or OpenAI work best with targeted queries on specific endpoint groups.'
-            }, { status: 413 });
-        }
-
-        // Context length exceeded
-        if (status === 400 && errorMessage.includes('reduce the length')) {
-            return NextResponse.json({
-                error: 'context_too_long',
-                userMessage: 'This API spec has too many endpoints to generate a complete SDK at once. Showing results for the first 15 endpoints.',
-                tip: 'Try loading a smaller API spec for full SDK generation.'
-            }, { status: 400 });
-        }
-
-        // Rate limit
-        if (status === 429) {
-            return NextResponse.json({
-                error: 'rate_limit',
-                userMessage: 'Daily AI quota reached. Please try again in a few minutes.',
-                tip: 'Our free-tier AI plan resets every hour.'
-            }, { status: 429 });
-        }
-
-        // Generic fallback
-        return NextResponse.json({
-            error: 'ai_error',
-            userMessage: 'Something went wrong with the AI response. Please try again.',
-        }, { status: 500 });
+        console.error('Route error in /api/generate-sdk:', error);
+        return aiService.formatErrorResponse(error);
     }
 }

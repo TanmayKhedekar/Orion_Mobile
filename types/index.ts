@@ -29,4 +29,14 @@ export interface ChatMessage {
     role: "user" | "assistant" | "system";
     content: string;
     isCode?: boolean;
+    provider?: string;
+    model?: string;
+    routingDecision?: {
+        provider: string;
+        mode: string;
+        reason: string;
+        taskType: string;
+        fallbackApplied?: boolean;
+        originalTarget?: string;
+    };
 }

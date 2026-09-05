@@ -1,13 +1,6 @@
 import { NextResponse } from 'next/server';
-import Groq from 'groq-sdk';
+import { aiService, TaskType } from '@/services/ai';
 import { aggressiveTrimSpec } from '@/lib/specTrimmer';
-
-let groq: Groq;
-try {
-    groq = new Groq({
-        apiKey: process.env.GROQ_API_KEY || 'dummy_key_for_build',
-    });
-} catch (e) { }
 
 function safeParseJSON(raw: string) {
     const start = raw.indexOf('{');
@@ -41,11 +34,8 @@ function extractEndpoints(specObj: any) {
 
 export async function POST(req: Request) {
     try {
-        const { specA, specB } = await req.json();
-
-        if (!process.env.GROQ_API_KEY) {
-            return NextResponse.json({ error: 'Groq API key not configured' }, { status: 500 });
-        }
+        const body = await req.json();
+        const { specA, specB, provider, model, routingMode } = body;
 
         let parsedA, parsedB;
         try {
@@ -128,7 +118,13 @@ CRITICAL: Your entire response must be a single valid JSON object with no text b
 
         const userContent = `Here is the programmatic diff:\n${JSON.stringify(diffSummary, null, 2)}`;
 
-        const completion = await groq.chat.completions.create({
+        const completion = await aiService.execute({
+            taskType: TaskType.API_SUMMARY,
+            routingMode,
+            provider,
+            model,
+            temperature: 0.2,
+            maxTokens: 4096,
             messages: [
                 {
                     role: 'system',
@@ -139,12 +135,9 @@ CRITICAL: Your entire response must be a single valid JSON object with no text b
                     content: userContent
                 }
             ],
-            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
-            temperature: 0.2,
-            max_tokens: 4096,
         });
 
-        const textContent = completion.choices[0]?.message?.content || '';
+        const textContent = completion.text || completion.content || '';
 
         let llmResult: any;
         try {
@@ -155,48 +148,13 @@ CRITICAL: Your entire response must be a single valid JSON object with no text b
 
         const finalResponse = {
             ...diffSummary,
-            ...llmResult
+            ...llmResult,
+            routingDecision: completion.routingDecision
         };
 
         return NextResponse.json(finalResponse);
     } catch (error: any) {
-        console.error('Route error:', error);
-
-        const errorMessage = error?.message || error?.error?.message || '';
-        const status = error?.status || 500;
-
-        // Token limit exceeded
-        if (status === 413 || errorMessage.includes('Request too large') || errorMessage.includes('tokens per minute')) {
-            return NextResponse.json({
-                error: 'spec_too_large',
-                userMessage: 'This API spec is too large to process on our current plan. We\'ve loaded the first 15 endpoints for you — try using a smaller spec or a specific section of this API.',
-                tip: 'Large specs like Spotify or OpenAI work best with targeted queries on specific endpoint groups.'
-            }, { status: 413 });
-        }
-
-        // Context length exceeded
-        if (status === 400 && errorMessage.includes('reduce the length')) {
-            return NextResponse.json({
-                error: 'context_too_long',
-                userMessage: 'This API spec has too many endpoints to generate a complete SDK at once. Showing results for the first 15 endpoints.',
-                tip: 'Try loading a smaller API spec for full SDK generation.'
-            }, { status: 400 });
-        }
-
-        // Rate limit
-        if (status === 429) {
-            return NextResponse.json({
-                error: 'rate_limit',
-                userMessage: 'Daily AI quota reached. Please try again in a few minutes.',
-                tip: 'Our free-tier AI plan resets every hour.'
-            }, { status: 429 });
-        }
-
-        // Generic fallback
-        return NextResponse.json({
-            error: 'ai_error',
-            userMessage: 'Something went wrong with the AI response. Please try again.',
-        }, { status: 500 });
+        console.error('Route error in /api/diff:', error);
+        return aiService.formatErrorResponse(error);
     }
 }
-
