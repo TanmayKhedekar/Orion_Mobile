@@ -3,6 +3,7 @@ import { Space_Grotesk, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
 import { cn } from '@/lib/utils'
 import { AuthProvider } from '@/context/AuthContext'
+import PWARegister from './pwa-register'
 
 const spaceGrotesk = Space_Grotesk({
     subsets: ['latin'],
@@ -55,11 +56,38 @@ export default function RootLayout({
         <html lang="en" className={`${spaceGrotesk.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
             <head>
                 <link rel="icon" href="/Orion.png" />
+                {/* PWA Manifest */}
+                <link rel="manifest" href="/manifest.json" />
+
+                {/* Theme */}
+                <meta name="theme-color" content="#00d4ff" />
+                <meta name="background-color" content="#0a0e1a" />
+
+                {/* PWA iOS Support */}
+                <meta name="apple-mobile-web-app-capable" content="yes" />
+                <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+                <meta name="apple-mobile-web-app-title" content="Orion" />
+                <link rel="apple-touch-icon" href="/Orion.png" />
+                <link rel="apple-touch-startup-image" href="/Orion.png" />
+
+                {/* PWA Android Support */}
+                <meta name="mobile-web-app-capable" content="yes" />
+                <meta name="application-name" content="Orion" />
+
+                {/* Microsoft Tiles */}
+                <meta name="msapplication-TileColor" content="#0a0e1a" />
+                <meta name="msapplication-TileImage" content="/Orion.png" />
+                <meta name="msapplication-tap-highlight" content="no" />
+
+                {/* General Mobile */}
+                <meta name="format-detection" content="telephone=no" />
+                <meta name="HandheldFriendly" content="true" />
             </head>
             <body className={cn(ibmPlexSans.className, "font-sans min-h-screen bg-background text-foreground antialiased selection:bg-accent selection:text-white")}>
                 <AuthProvider>
                     {children}
                 </AuthProvider>
+                <PWARegister />
             </body>
         </html>
     )
