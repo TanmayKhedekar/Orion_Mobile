@@ -112,14 +112,17 @@ export class OrganizerCloudProvider implements AIProvider {
 
         const payload: Record<string, any> = {
             model: model,
-            messages: formattedMessages
+            messages: formattedMessages,
+            reasoning: { effort: 'none' }
         };
 
         if (typeof request.temperature === 'number') {
             payload.temperature = request.temperature;
         }
         if (typeof request.maxTokens === 'number') {
-            payload.max_tokens = request.maxTokens;
+            payload.max_tokens = Math.max(request.maxTokens, 4096);
+        } else {
+            payload.max_tokens = 4096;
         }
         if (request.streaming) {
             payload.stream = true;

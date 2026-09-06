@@ -21,30 +21,33 @@ export async function POST(req: Request) {
             }
         }
 
-        const systemPrompt = `You are a senior API integration engineer. The user will provide a natural language integration goal, and you must output a JSON response that fulfills this goal assuming you have an OpenAPI specification (which may or may not be provided). 
+        const systemPrompt = `You are a senior API integration engineer. The user will provide a natural language integration goal, and you must output a structured JSON response that fulfills this goal.
 If 'specs' is provided, use the context from it. 
 
-Provide a comprehensive multi-step integration plan, and generate complete working code.
+Provide a comprehensive multi-step integration plan with real endpoints, and generate complete working code for Python, JavaScript, and cURL commands.
 
-You MUST respond with ONLY valid JSON and no markdown wrapping or additional text.
+You MUST respond with ONLY valid JSON and no markdown formatting outside the JSON.
 Format your JSON EXACTLY like this:
 {
   "steps": [
     {
-      "title": "Step title",
-      "description": "Step description",
-      "api": "API or endpoint name"
+      "title": "Step 1: Description title",
+      "description": "Detailed explanation of what this step does",
+      "api": "Target API / Endpoint"
     }
   ],
-  "code": "Complete, runnable Python code snippet implementing the full integration",
-  "jsCode": "Complete, runnable JavaScript/fetch code snippet implementing the full integration",
+  "code": "# Complete runnable Python script implementing the integration\\nimport requests\\n...",
+  "jsCode": "// Complete runnable JavaScript script\\nasync function main() { ... }\\nmain();",
   "curlCommands": [
-    "curl command for step 1",
-    "curl command for step 2"
+    "curl -X GET 'https://api.example.com/...' -H 'Authorization: Bearer ...'",
+    "curl -X POST 'https://api.example.com/...' -H 'Content-Type: application/json' -d '{\"key\":\"value\"}'"
   ],
-  "authNotes": "Any auth/token notes the developer needs to know"
+  "authNotes": "Authentication instructions, required API keys, headers, or tokens."
 }
-CRITICAL: Your entire response must be a single valid JSON object with no text before or after it. All code samples must have newlines escaped as \\n within the JSON string values. Do not use actual newlines inside JSON string values.`;
+CRITICAL: 
+- Escape all double quotes inside JSON string values as \\".
+- Escape newlines as \\n within string values.
+- Do NOT output any conversational text or markdown fences outside the JSON object.`;
 
         const completion = await aiService.execute({
             taskType: TaskType.AGENT_PLANNING,
@@ -52,7 +55,7 @@ CRITICAL: Your entire response must be a single valid JSON object with no text b
             provider,
             model,
             temperature: 0.2,
-            maxTokens: 4096,
+            maxTokens: 6000,
             messages: [
                 {
                     role: 'system',
