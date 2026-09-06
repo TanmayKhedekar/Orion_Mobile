@@ -4,7 +4,14 @@ import { aiService, TaskType } from '@/services/ai';
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { messages, provider, model, routingMode } = body;
+        const { messages, provider, model, routingMode, useLocal } = body;
+
+        if (useLocal) {
+            return NextResponse.json({
+                useLocalBridge: true,
+                message: 'Local AI requested. Please route request through the on-device LocalAI bridge.'
+            });
+        }
 
         if (!messages || !Array.isArray(messages)) {
             return NextResponse.json(

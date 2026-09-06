@@ -5,7 +5,14 @@ import { safeExtractJSON } from '@/lib/safeJson';
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { responseBody, nextEndpoint, provider, model, routingMode } = body;
+        const { responseBody, nextEndpoint, provider, model, routingMode, useLocal } = body;
+
+        if (useLocal) {
+            return NextResponse.json({
+                useLocalBridge: true,
+                message: 'Local AI requested. Please route request through the on-device LocalAI bridge.'
+            });
+        }
 
         const systemPrompt = `You are an AI API Chaining Assistant. Your task is to analyze the response JSON of a previous API call and a target next endpoint's parameter schema, then suggest how values from the previous response should map to the next endpoint's inputs (parameters or body fields).
 

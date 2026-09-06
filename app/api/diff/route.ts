@@ -22,7 +22,14 @@ function extractEndpoints(specObj: any) {
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { specA, specB, provider, model, routingMode } = body;
+        const { specA, specB, provider, model, routingMode, useLocal } = body;
+
+        if (useLocal) {
+            return NextResponse.json({
+                useLocalBridge: true,
+                message: 'Local AI requested. Please route request through the on-device LocalAI bridge.'
+            });
+        }
 
         let parsedA, parsedB;
         try {

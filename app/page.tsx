@@ -21,6 +21,8 @@ import { ApiMetaphorAnimation } from "@/components/ApiMetaphorAnimation";
 import { voiceService } from "@/services/voice/voiceService";
 import { ttsService } from "@/services/voice/ttsService";
 import { VoiceState, TTSState } from "@/services/voice/types";
+import { isAndroidApp, isLocalAIReady, generateLocal, startVoiceInput } from "@/lib/localAI";
+import { safeExtractJSON } from "@/lib/safeJson";
 
 function normalizeAssistantMessage(raw: any): string {
     if (!raw) return '';
@@ -318,6 +320,24 @@ export default function Home() {
     ]);
     const [isVarStoreOpen, setIsVarStoreOpen] = useState(true);
     const [routingMode, setRoutingMode] = useState<"auto" | "local" | "cloud" | "groq">("auto");
+    const [isAndroid, setIsAndroid] = useState(false);
+    const [localAIReady, setLocalAIReady] = useState(false);
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const inAndroid = isAndroidApp();
+            setIsAndroid(inAndroid);
+            if (inAndroid && isLocalAIReady()) {
+                setLocalAIReady(true);
+            }
+            (window as any).onVoiceResult = (text: string) => {
+                if (text) setIntentGoal(text);
+            };
+            (window as any).onLocalAIReady = () => {
+                setLocalAIReady(true);
+            };
+        }
+    }, []);
 
     // Mobile presentation state (UI only)
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -590,12 +610,38 @@ export default function Home() {
         setIntentLoading(true);
         setIntentError(null);
         try {
+            if (routingMode === "local" && (isAndroid || isAndroidApp())) {
+                const prompt = `Goal: ${intentGoal}\nSpecs: ${spec ? JSON.stringify(spec) : 'None'}\nGenerate multi-step integration plan and runnable Python, JS, cURL code in JSON format.`;
+                const rawResponse = await generateLocal(prompt);
+                const fallbackPlan = {
+                    steps: [{ title: 'On-Device Integration Step', description: `Local NPU plan for ${intentGoal}`, api: 'Target API' }],
+                    code: '# On-Device Python Code\nimport requests\n',
+                    jsCode: '// On-Device JS Code\n',
+                    curlCommands: ['curl -X GET "https://api.example.com"'],
+                    authNotes: 'Generated locally on-device via Snapdragon NPU.'
+                };
+                const jsonResult: any = safeExtractJSON(rawResponse, fallbackPlan);
+                jsonResult.isLocalResult = true;
+                jsonResult.routingDecision = { mode: 'local', provider: 'Snapdragon NPU', reason: 'Generated on-device · Snapdragon NPU' };
+                setIntentResult(jsonResult);
+                return;
+            }
+
             const res = await fetch(getApiUrl("/api/intent"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ goal: intentGoal, specs: spec ? [spec] : [], routingMode })
+                body: JSON.stringify({ goal: intentGoal, specs: spec ? [spec] : [], routingMode, useLocal: routingMode === 'local' })
             });
             const data = await res.json();
+            if (data.useLocalBridge) {
+                const prompt = `Goal: ${intentGoal}\nSpecs: ${spec ? JSON.stringify(spec) : 'None'}\nGenerate multi-step integration plan and runnable Python, JS, cURL code in JSON format.`;
+                const rawResponse = await generateLocal(prompt);
+                const jsonResult: any = safeExtractJSON(rawResponse, { steps: [], code: "", jsCode: "", curlCommands: [], authNotes: "" });
+                jsonResult.isLocalResult = true;
+                jsonResult.routingDecision = { mode: 'local', provider: 'Snapdragon NPU', reason: 'Generated on-device · Snapdragon NPU' };
+                setIntentResult(jsonResult);
+                return;
+            }
             if (!res.ok || data.error) {
                 setIntentError(data.userMessage ? data : { userMessage: data.error || "Failed to generate integration." });
                 return;
@@ -624,6 +670,25 @@ export default function Home() {
            They might ask for code generation, explanation, or help debugging.`
                 : "";
 
+            if (routingMode === "local" && (isAndroid || isAndroidApp())) {
+                const prompt = `System: ${systemContext}\nUser: ${text}`;
+                const rawResponse = await generateLocal(prompt);
+                const cleanContent = normalizeAssistantMessage(rawResponse || "No response from local AI.");
+                const msgId = `msg_${Date.now()}`;
+                setMessages([...newMessages, {
+                    role: "assistant",
+                    content: cleanContent,
+                    provider: "Snapdragon NPU",
+                    model: "snapdragon-npu-local",
+                    isLocalResult: true,
+                    routingDecision: { mode: "local", provider: "Snapdragon NPU", reason: "Generated on-device · Snapdragon NPU" }
+                }]);
+                if (autoSpeak && cleanContent) {
+                    ttsService.speak(cleanContent, msgId, { language: voiceLang });
+                }
+                return;
+            }
+
             const reqMessages = [
                 ...newMessages.map(m => ({ role: m.role, content: m.content })),
                 { role: "system", content: systemContext }
@@ -632,10 +697,29 @@ export default function Home() {
             const res = await fetch(getApiUrl("/api/chat"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ messages: reqMessages, routingMode })
+                body: JSON.stringify({ messages: reqMessages, routingMode, useLocal: routingMode === 'local' })
             });
 
             const data = await res.json();
+
+            if (data.useLocalBridge) {
+                const prompt = `System: ${systemContext}\nUser: ${text}`;
+                const rawResponse = await generateLocal(prompt);
+                const cleanContent = normalizeAssistantMessage(rawResponse || "No response from local AI.");
+                const msgId = `msg_${Date.now()}`;
+                setMessages([...newMessages, {
+                    role: "assistant",
+                    content: cleanContent,
+                    provider: "Snapdragon NPU",
+                    model: "snapdragon-npu-local",
+                    isLocalResult: true,
+                    routingDecision: { mode: "local", provider: "Snapdragon NPU", reason: "Generated on-device · Snapdragon NPU" }
+                }]);
+                if (autoSpeak && cleanContent) {
+                    ttsService.speak(cleanContent, msgId, { language: voiceLang });
+                }
+                return;
+            }
 
             if (!res.ok || data.error) {
                 const errorMsg = data.error === 'spec_too_large'
@@ -887,6 +971,22 @@ export default function Home() {
             const qString = queryParams.toString();
             const fullUrl = `${spec?.baseUrl}${finalUrl}${qString ? `?${qString}` : ''}`;
 
+            if (routingMode === "local" && (isAndroid || isAndroidApp())) {
+                const prompt = `Status: ${testResponse.status}\nURL: ${fullUrl}\nMethod: ${selectedEndpoint.method}\nResponse Body: ${typeof testResponse.data === 'object' ? JSON.stringify(testResponse.data) : testResponse.data}\nDiagnose the error in JSON format: { "diagnosis": "...", "rootCause": "...", "fix": "...", "severity": "warning" }`;
+                const rawResponse = await generateLocal(prompt);
+                const fallbackDiag = {
+                    diagnosis: "On-Device NPU Error Diagnosis",
+                    rootCause: "Analyzed directly on your Snapdragon NPU.",
+                    fix: "Verify payload parameters and authorization headers.",
+                    severity: "warning"
+                };
+                const jsonResult: any = safeExtractJSON(rawResponse, fallbackDiag);
+                jsonResult.isLocalResult = true;
+                jsonResult.routingDecision = { mode: 'local', provider: 'Snapdragon NPU', reason: 'Generated on-device · Snapdragon NPU' };
+                setDiagnosisResult(jsonResult);
+                return;
+            }
+
             const res = await fetch(getApiUrl("/api/diagnose"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -897,10 +997,20 @@ export default function Home() {
                     requestUrl: fullUrl,
                     requestMethod: selectedEndpoint.method,
                     requestBody: selectedEndpoint.requestBody ? testParams.body : undefined,
-                    routingMode
+                    routingMode,
+                    useLocal: routingMode === 'local'
                 })
             });
             const data = await res.json();
+            if (data.useLocalBridge) {
+                const prompt = `Status: ${testResponse.status}\nURL: ${fullUrl}\nMethod: ${selectedEndpoint.method}\nResponse Body: ${typeof testResponse.data === 'object' ? JSON.stringify(testResponse.data) : testResponse.data}\nDiagnose the error in JSON format: { "diagnosis": "...", "rootCause": "...", "fix": "...", "severity": "warning" }`;
+                const rawResponse = await generateLocal(prompt);
+                const jsonResult: any = safeExtractJSON(rawResponse, { diagnosis: "Local NPU Diagnosis", rootCause: rawResponse, fix: "Check request", severity: "warning" });
+                jsonResult.isLocalResult = true;
+                jsonResult.routingDecision = { mode: 'local', provider: 'Snapdragon NPU', reason: 'Generated on-device · Snapdragon NPU' };
+                setDiagnosisResult(jsonResult);
+                return;
+            }
             if (!res.ok || data.error) {
                 setDiagnosisResult({
                     diagnosis: "AI Diagnosis error",
@@ -1013,6 +1123,44 @@ export default function Home() {
             )}
         </div>
     );
+
+    const renderAndroidAIModeSelector = () => {
+        if (!isAndroid && !isAndroidApp()) return null;
+
+        return (
+            <div className="flex items-center gap-2">
+                {routingMode === "local" && (
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                        <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        <span>NPU Active</span>
+                    </div>
+                )}
+                <div className="inline-flex items-center rounded-full p-1 bg-[#0B132B] border border-cyan-500/30 shadow-md" role="group" aria-label="Android AI Routing Mode">
+                    {[
+                        { id: "auto", label: "Auto — Groq Cloud" },
+                        { id: "cloud", label: "Cloud — Groq (default)" },
+                        { id: "local", label: "Local — Snapdragon NPU ⚡" },
+                    ].map((option) => (
+                        <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => setRoutingMode(option.id as any)}
+                            className={`px-2.5 py-1 text-xs font-semibold rounded-full transition-all ${
+                                routingMode === option.id
+                                    ? "bg-cyan-500/20 text-cyan-400 border border-cyan-400 shadow-xs"
+                                    : "text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10"
+                            }`}
+                        >
+                            {option.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        );
+    };
 
     const renderRoutingModeSelector = (size: "sm" | "md" = "sm") => (
         <div className="inline-flex items-center rounded-lg p-0.5 bg-black/25 dark:bg-white/5 border border-white/10 shadow-xs" role="group" aria-label="AI Routing Mode">
@@ -1127,6 +1275,12 @@ export default function Home() {
                                                     <span className="text-amber-400 text-[9px] font-sans">(fallback)</span>
                                                 )}
                                             </>
+                                        )}
+                                        {(m.routingDecision?.mode === 'local' || m.provider === 'Snapdragon NPU' || (m as any).isLocalResult) && (
+                                            <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 font-bold border border-cyan-500/40 text-[10px] flex items-center gap-1">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                                                Generated on-device · Snapdragon NPU
+                                            </span>
                                         )}
                                     </div>
                                     {/* Text-to-Speech Output (Read Aloud Button) */}
@@ -1665,7 +1819,7 @@ export default function Home() {
                         </div>
                     </div>
                     <div className="flex justify-end items-center space-x-3">
-                        {renderRoutingModeSelector()}
+                        {(isAndroid || isAndroidApp()) ? renderAndroidAIModeSelector() : renderRoutingModeSelector()}
                         {user && (
                             <Button
                                 variant="ghost"
@@ -2038,12 +2192,24 @@ export default function Home() {
                                 </div>
 
                                 <div className="space-y-4">
-                                    <Textarea
-                                        value={intentGoal}
-                                        onChange={e => setIntentGoal(e.target.value)}
-                                        placeholder="Describe what you want to build — e.g. 'Fetch GitHub repos and post a summary to Slack'"
-                                        className="w-full text-lg p-6 min-h-[120px] rounded-xl glassmorphism"
-                                    />
+                                    <div className="relative">
+                                        <Textarea
+                                            value={intentGoal}
+                                            onChange={e => setIntentGoal(e.target.value)}
+                                            placeholder="Describe what you want to build — e.g. 'Fetch GitHub repos and post a summary to Slack'"
+                                            className="w-full text-lg p-6 pr-14 min-h-[120px] rounded-xl glassmorphism"
+                                        />
+                                        {(isAndroid || isAndroidApp()) && (
+                                            <button
+                                                type="button"
+                                                onClick={startVoiceInput}
+                                                title="Voice Input (Snapdragon NPU)"
+                                                className="absolute right-4 top-4 p-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 transition-all flex items-center justify-center shadow-xs hover:scale-105 active:scale-95"
+                                            >
+                                                <Mic className="w-5 h-5 text-cyan-400 animate-pulse" />
+                                            </button>
+                                        )}
+                                    </div>
                                     <Button
                                         onClick={handleGenerateIntent}
                                         disabled={intentLoading || !intentGoal.trim()}
@@ -2057,6 +2223,15 @@ export default function Home() {
 
                                 {intentResult && (
                                     <div className="space-y-8 mt-12 animate-in fade-in slide-in-from-bottom-4">
+                                        {(intentResult.isLocalResult || intentResult.routingDecision?.mode === 'local' || routingMode === 'local') && (
+                                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-bold shadow-xs">
+                                                <span className="relative flex h-2 w-2">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                                                </span>
+                                                <span>Generated on-device · Snapdragon NPU</span>
+                                            </div>
+                                        )}
                                         {/* Auth Notes */}
                                         {intentResult.authNotes && (
                                             <div className="bg-amber-500/10 border border-amber-500/30 text-amber-950 dark:text-amber-200 p-6 rounded-xl flex items-start space-x-4 shadow-sm">
@@ -2837,6 +3012,12 @@ export default function Home() {
                                                                             }`}>
                                                                             {diagnosisResult.severity}
                                                                         </Badge>
+                                                                        {(diagnosisResult.isLocalResult || routingMode === 'local') && (
+                                                                            <Badge variant="outline" className="border-cyan-500 text-cyan-400 bg-cyan-500/10 font-bold flex items-center gap-1">
+                                                                                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                                                                                Generated on-device · Snapdragon NPU
+                                                                            </Badge>
+                                                                        )}
                                                                     </div>
 
                                                                     <div className="space-y-4 relative z-10">

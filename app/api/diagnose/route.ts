@@ -6,7 +6,14 @@ import { safeExtractJSON } from '@/lib/safeJson';
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { status, responseBody, requestHeaders, requestUrl, requestMethod, requestBody, spec, provider, model, routingMode } = body;
+        const { status, responseBody, requestHeaders, requestUrl, requestMethod, requestBody, spec, provider, model, routingMode, useLocal } = body;
+
+        if (useLocal) {
+            return NextResponse.json({
+                useLocalBridge: true,
+                message: 'Local AI requested. Please route request through the on-device LocalAI bridge.'
+            });
+        }
 
         let trimmedSpec = null;
         if (spec) {

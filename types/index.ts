@@ -31,11 +31,12 @@ export interface ChatMessage {
     isCode?: boolean;
     provider?: string;
     model?: string;
+    isLocalResult?: boolean;
     routingDecision?: {
         provider: string;
         mode: string;
         reason: string;
-        taskType: string;
+        taskType?: string;
         fallbackApplied?: boolean;
         originalTarget?: string;
     };
