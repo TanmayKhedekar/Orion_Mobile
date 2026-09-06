@@ -73,7 +73,9 @@ function renderInlineMarkdown(text: string, theme: "dark" | "light") {
                 <code
                     key={i}
                     className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold mx-0.5 border ${
-                        theme === 'dark' ? 'bg-black/40 border-white/10 text-cyan-300' : 'bg-gray-100 border-black/10 text-blue-700'
+                        theme === 'dark'
+                            ? 'bg-black/50 border-white/15 text-cyan-300'
+                            : 'bg-slate-100 border-slate-300 text-teal-800'
                     }`}
                 >
                     {chunk.slice(1, -1)}
@@ -107,15 +109,19 @@ const MessageContent = ({ content, theme }: { content: string | any, theme: "dar
                         const language = match[1] || 'text';
                         const code = match[2];
                         return (
-                            <div key={index} className={`relative rounded-xl overflow-hidden border my-2.5 w-full shadow-md ${
-                                theme === 'dark' ? 'border-white/10 bg-[#0d0d12]' : 'border-black/10 bg-gray-50'
+                            <div key={index} className={`relative rounded-xl overflow-hidden border my-2.5 w-full shadow-sm ${
+                                theme === 'dark'
+                                    ? 'border-white/10 bg-[#0d0d12]'
+                                    : 'border-slate-300 bg-slate-900 text-slate-100'
                             }`}>
                                 <div className={`flex items-center justify-between px-3 py-1.5 border-b ${
-                                    theme === 'dark' ? 'border-white/5 bg-black/60' : 'border-black/5 bg-gray-200'
+                                    theme === 'dark'
+                                        ? 'border-white/10 bg-black/60 text-slate-400'
+                                        : 'border-slate-800 bg-slate-950 text-slate-300'
                                 }`}>
-                                    <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">{language}</span>
+                                    <span className="text-[10px] uppercase font-bold tracking-wider">{language}</span>
                                     <button
-                                        className="text-[10px] flex items-center space-x-1 text-muted-foreground hover:text-foreground transition-colors px-1 py-0.5 rounded"
+                                        className="text-[10px] flex items-center space-x-1 text-slate-400 hover:text-white transition-colors px-1.5 py-0.5 rounded hover:bg-white/10"
                                         onClick={(e) => {
                                             navigator.clipboard.writeText(code);
                                             const btn = e.currentTarget;
@@ -129,7 +135,7 @@ const MessageContent = ({ content, theme }: { content: string | any, theme: "dar
                                     </button>
                                 </div>
                                 <div className={`p-3.5 overflow-x-auto text-[12px] font-mono leading-normal ${
-                                    theme === 'dark' ? 'text-emerald-300 bg-black/40' : 'text-blue-700 bg-white'
+                                    theme === 'dark' ? 'text-emerald-300 bg-black/40' : 'text-emerald-400 bg-slate-900'
                                 }`}>
                                     <code>{code}</code>
                                 </div>
@@ -175,7 +181,7 @@ const MessageContent = ({ content, theme }: { content: string | any, theme: "dar
                                             const isOrdered = /^\d+\.\s+/.test(trimmedLine);
                                             const itemContent = trimmedLine.replace(/^([-*•]|\d+\.)\s+/, '');
                                             return (
-                                                <li key={lIdx} className="text-[13px] leading-relaxed flex items-start gap-2">
+                                                <li key={lIdx} className="text-[13px] leading-relaxed flex items-start gap-2 text-foreground">
                                                     <span className="text-primary font-bold text-xs select-none mt-0.5">
                                                         {isOrdered ? `${lIdx + 1}.` : '•'}
                                                     </span>
@@ -190,7 +196,7 @@ const MessageContent = ({ content, theme }: { content: string | any, theme: "dar
                             }
 
                             return (
-                                <p key={pIdx} className="text-[13px] leading-relaxed whitespace-pre-wrap">
+                                <p key={pIdx} className="text-[13px] leading-relaxed whitespace-pre-wrap text-foreground">
                                     {renderInlineMarkdown(trimmed, theme)}
                                 </p>
                             );
@@ -1163,29 +1169,32 @@ export default function Home() {
     };
 
     const renderRoutingModeSelector = (size: "sm" | "md" = "sm") => (
-        <div className="inline-flex items-center rounded-lg p-0.5 bg-black/25 dark:bg-white/5 border border-white/10 shadow-xs" role="group" aria-label="AI Routing Mode">
+        <div className="inline-flex items-center rounded-xl p-0.5 bg-black/40 dark:bg-zinc-950/80 border border-white/10 shadow-inner gap-0.5" role="group" aria-label="AI Routing Mode">
             {[
                 { id: "auto", label: "Auto", icon: "⚡", title: "Auto Mode: Deterministic Hybrid Task Routing" },
                 { id: "cloud", label: "Cloud", icon: "☁️", title: "Cloud Mode: Organizer Cloud AI / Groq" },
                 { id: "local", label: "Local", icon: "🧠", title: "Local Mode: Qualcomm Snapdragon On-Device NPU" },
-            ].map((m) => (
-                <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setRoutingMode(m.id as any)}
-                    title={m.title}
-                    className={`rounded-md font-medium transition-all flex items-center gap-1 ${
-                        size === "sm" ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"
-                    } ${
-                        routingMode === m.id
-                            ? "bg-primary text-primary-foreground font-bold shadow-xs scale-100"
-                            : "text-muted-foreground hover:text-foreground hover:bg-white/5"
-                    }`}
-                >
-                    <span className="text-[11px]">{m.icon}</span>
-                    <span className="font-semibold">{m.label}</span>
-                </button>
-            ))}
+            ].map((m) => {
+                const isActive = routingMode === m.id;
+                return (
+                    <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setRoutingMode(m.id as any)}
+                        title={m.title}
+                        className={`rounded-lg font-medium transition-all flex items-center gap-1 ${
+                            size === "sm" ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-xs"
+                        } ${
+                            isActive
+                                ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold shadow-xs scale-100"
+                                : "text-muted-foreground hover:text-foreground hover:bg-white/5 active:scale-95"
+                        }`}
+                    >
+                        <span className="text-[11px]">{m.icon}</span>
+                        <span className="font-semibold tracking-tight">{m.label}</span>
+                    </button>
+                );
+            })}
         </div>
     );
 
@@ -1232,7 +1241,7 @@ export default function Home() {
                 </div>
 
                 {/* Sub-Header: Routing Mode & Speech Language Selector in a clean single row */}
-                <div className="px-3 py-1.5 flex items-center justify-between gap-1.5 border-t border-white/5 bg-card/40">
+                <div className="px-3 py-1.5 flex items-center justify-between gap-1.5 border-t border-border/60 bg-muted/30">
                     <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-[11px] font-semibold text-muted-foreground flex-shrink-0">Mode:</span>
                         {renderRoutingModeSelector("sm")}
@@ -1240,7 +1249,7 @@ export default function Home() {
                     <button
                         type="button"
                         onClick={() => setVoiceLang(l => (l === 'en-US' ? 'hi-IN' : 'en-US'))}
-                        className="text-[11px] font-mono px-2 py-1 rounded-md border border-primary/30 bg-primary/10 text-primary font-semibold flex items-center gap-1 min-h-[26px] flex-shrink-0"
+                        className="text-[11px] font-mono px-2 py-1 rounded-md border border-primary/30 bg-primary/10 text-primary font-semibold flex items-center gap-1 min-h-[26px] flex-shrink-0 hover:bg-primary/20 transition-all active:scale-95"
                         title="Toggle Speech Language (English / Hindi)"
                     >
                         <Languages className="w-3.5 h-3.5" />
@@ -1258,11 +1267,11 @@ export default function Home() {
                 {messages.filter(m => m.role !== 'system').map((m, idx) => (
                     <div key={idx} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
                         <div className={`ai-message ${m.role === 'user' ? 'user' : 'assistant'}`}>
-                            <div className={`px-0 py-0 break-anywhere ${m.role === 'user' ? 'text-[13px] whitespace-pre-wrap' : ''}`}>
+                            <div className={`px-0 py-0 break-anywhere ${m.role === 'user' ? 'text-[13px] whitespace-pre-wrap font-medium text-white' : 'text-[13px]'}`}>
                                 {m.role === 'user' ? m.content : <MessageContent content={m.content} theme={theme} />}
                             </div>
                             {m.role === 'assistant' && (
-                                <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between flex-wrap gap-2 text-[10px] text-muted-foreground font-mono">
+                                <div className="mt-2.5 pt-2 border-t border-border/40 flex items-center justify-between flex-wrap gap-2 text-[10px] text-muted-foreground font-mono">
                                     <div className="flex items-center gap-1.5" title={m.routingDecision?.reason}>
                                         {m.routingDecision && (
                                             <>
@@ -1407,7 +1416,7 @@ export default function Home() {
                             key={suggestion}
                             type="button"
                             onClick={() => handleSendMessage(suggestion)}
-                            className="text-xs whitespace-nowrap hover:bg-primary/20 hover:text-primary transition-colors border border-white/10 px-3 py-2 rounded-full min-h-[36px]"
+                            className="text-xs whitespace-nowrap transition-all"
                         >
                             {suggestion}
                         </button>
@@ -1819,7 +1828,7 @@ export default function Home() {
                         </div>
                     </div>
                     <div className="flex justify-end items-center space-x-3">
-                        {(isAndroid || isAndroidApp()) ? renderAndroidAIModeSelector() : renderRoutingModeSelector()}
+                        {(isAndroid || isAndroidApp()) && renderAndroidAIModeSelector()}
                         {user && (
                             <Button
                                 variant="ghost"
